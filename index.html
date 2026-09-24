@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdTech CodeLab | Espace Étudiant</title>
+    <meta name="description" content="Plateforme d'évaluation continue pour cours d'Intelligence Artificielle et de Code.">
+    
+    <!-- Polices Google : Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Canvas Confetti CDN (Célébration des bonnes notes) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Supabase JS Client v2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* Custom scrollbar and animations */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.85; transform: scale(1.02); }
+        }
+        .animate-pulse-subtle { animation: pulse-subtle 3s infinite ease-in-out; }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .dropzone-active {
+            border-color: #818cf8 !important;
+            background-color: rgba(99, 102, 241, 0.12) !important;
+            transform: scale(1.01);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-brand-500 selection:text-white flex flex-col relative overflow-x-hidden">
+
+    <!-- Background glowing ambient effects -->
+    <div class="fixed top-0 left-1/4 w-96 h-96 bg-brand-600/20 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse-subtle"></div>
+    <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-indigo-900/20 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-6 py-4 transition-all">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-brand-500/20 text-white font-bold">
+                    <i data-lucide="code-2" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="font-display font-bold text-lg tracking-tight text-white flex items-center gap-2">
+                        EdTech <span class="text-brand-400">CodeLab</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">Étudiant</span>
+                    </span>
+                    <p class="text-xs text-slate-400">Portail de Soumission & Évaluation en Temps Réel</p>
+                </div>
+            </div>
+
+            <!-- Header Right: User info or Auth status -->
+            <div id="userHeaderSection" class="flex items-center space-x-4">
+                <div id="realtimeStatusBadge" class="hidden md:flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-900/80 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 -ml-3"></span>
+                    <span>Temps Réel Actif</span>
+                </div>
+
+                <div id="authProfilePill" class="hidden items-center space-x-3 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold font-display" id="userAvatar">
+                        É
+                    </div>
+                    <div class="hidden sm:block text-left">
+                        <div class="text-xs font-semibold text-slate-200" id="userEmailText">etudiant@ecole.fr</div>
+                        <div class="text-[10px] text-slate-400">Rôle : Étudiant</div>
+                    </div>
+                    <button id="logoutBtn" title="Déconnexion" class="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+        
+        <!-- ========================================================================= -->
+        <!-- SECTION 1 : AUTHENTIFICATION (Affichée si non connecté)                   -->
+        <!-- ========================================================================= -->
+        <section id="authSection" class="max-w-md mx-auto my-12">
+            <div class="glass-panel rounded-2xl p-8 shadow-2xl shadow-black/50 border border-slate-800">
+                <div class="text-center mb-6">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400 mb-3 shadow-inner">
+                        <i data-lucide="lock" class="w-7 h-7"></i>
+                    </div>
+                    <h1 class="font-display text-2xl font-bold text-white" id="authFormTitle">Connexion Étudiant</h1>
+                    <p class="text-xs text-slate-400 mt-1">Accédez à votre espace de rendu pour soumettre vos devoirs.</p>
+                </div>
+
+                <!-- Tabs Connexion / Inscription -->
+                <div class="flex p-1 bg-slate-900/90 rounded-xl mb-6 border border-slate-800">
+                    <button id="tabLogin" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-brand-600 text-white transition-all shadow">
+                        Se connecter
+                    </button>
+                    <button id="tabRegister" class="flex-1 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition-all">
+                        Créer un compte
+                    </button>
+                </div>
+
+                <!-- Formulaire Auth -->
+                <form id="authForm" class="space-y-4">
+                    <div id="nameFieldContainer" class="hidden">
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Nom complet ou Pseudo</label>
+                        <div class="relative">
+                            <i data-lucide="user" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="text" id="authNameInput" placeholder="ex: Jean Dupont" 
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Adresse Email Universitaire</label>
+                        <div class="relative">
+                            <i data-lucide="mail" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="email" id="authEmailInput" required placeholder="nom@etudiant.univ.fr" 
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Mot de passe</label>
+                        <div class="relative">
+                            <i data-lucide="key-round" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="password" id="authPasswordInput" required placeholder="••••••••" minlength="6"
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-colors">
+                        </div>
+                    </div>
+
+                    <div id="authAlert" class="hidden p-3 rounded-xl text-xs flex items-start space-x-2"></div>
+
+                    <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 transition-all flex items-center justify-center space-x-2 disabled:opacity-50">
+                        <span id="authSubmitText">Se connecter</span>
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </form>
+
+                <!-- Configuration Warning Banner (if credentials not configured) -->
+                <div id="configWarning" class="hidden mt-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                    <div class="flex items-center gap-2 font-semibold">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400"></i>
+                        <span>Configuration requise</span>
+                    </div>
+                    <p class="mt-1 text-[11px] text-amber-200/80">
+                        Renseignez votre <code class="bg-amber-950 px-1 rounded text-amber-300">URL</code> et <code class="bg-amber-950 px-1 rounded text-amber-300">ANON_KEY</code> dans <code class="underline">config.js</code> pour activer Supabase.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 2 : ESPACE ÉTUDIANT (Affiché après authentification)              -->
+        <!-- ========================================================================= -->
+        <section id="studentDashboard" class="hidden space-y-8">
+            
+            <!-- Bandeau de Bienvenue & Statut -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-800">
+                <div class="relative z-10">
+                    <h2 class="font-display text-2xl font-bold text-white flex items-center gap-2">
+                        Bienvenue, <span id="studentGreetingName" class="text-brand-400">Étudiant</span> 👋
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">
+                        Sélectionnez une séance, téléversez votre travail et observez la notation en direct.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center">
+                        <div class="text-xs text-slate-400">Devoirs soumis</div>
+                        <div class="text-lg font-bold text-white font-display" id="statSubmittedCount">0</div>
+                    </div>
+                    <div class="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center">
+                        <div class="text-xs text-slate-400">Moyenne obtenue</div>
+                        <div class="text-lg font-bold text-emerald-400 font-display" id="statAverageGrade">--/20</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grille Principale : Dépôt & Historique -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- COLONNE GAUCHE : ZONE DE DÉPÔT / UPLOAD (5 cols) -->
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
+                        <div class="flex items-center justify-between mb-5">
+                            <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                <i data-lucide="upload-cloud" class="w-5 h-5 text-brand-400"></i>
+                                Nouveau Rendu
+                            </h3>
+                            <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+                                Supabase Storage
+                            </span>
+                        </div>
+
+                        <form id="submissionForm" class="space-y-4">
+                            <!-- 1. Sélecteur de Séance -->
+                            <div>
+                                <label for="assignmentSelect" class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    1. Choisir la Séance de Cours
+                                </label>
+                                <div class="relative">
+                                    <select id="assignmentSelect" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition-colors appearance-none cursor-pointer">
+                                        <!-- Rempli dynamiquement par JS -->
+                                    </select>
+                                    <i data-lucide="chevron-down" class="w-4 h-4 absolute right-3.5 top-3.5 text-slate-400 pointer-events-none"></i>
+                                </div>
+                                <p id="assignmentHelpText" class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                                    Sélectionnez une séance pour afficher les consignes.
+                                </p>
+                            </div>
+
+                            <!-- 2. Zone Drag & Drop -->
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    2. Déposer votre Fichier (.py, .ipynb, .png, .jpg)
+                                </label>
+                                
+                                <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 bg-slate-900/40 relative group">
+                                    <input type="file" id="fileInput" class="hidden" accept=".py,.ipynb,.png,.jpg,.jpeg">
+                                    
+                                    <div id="dropzoneEmpty" class="space-y-2">
+                                        <div class="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                                            <i data-lucide="file-up" class="w-6 h-6"></i>
+                                        </div>
+                                        <div class="text-sm font-medium text-slate-200">
+                                            Glissez votre fichier ici ou <span class="text-brand-400 underline">parcourez</span>
+                                        </div>
+                                        <div class="text-[11px] text-slate-400">
+                                            Code Python (.py, .ipynb) ou Rendu Graphique (.png, .jpg) • Max 50 Mo
+                                        </div>
+                                    </div>
+
+                                    <!-- Fichier sélectionné preview -->
+                                    <div id="dropzonePreview" class="hidden flex items-center justify-between bg-slate-900 border border-brand-500/40 rounded-xl p-3 text-left">
+                                        <div class="flex items-center space-x-3 overflow-hidden">
+                                            <div id="fileTypeIcon" class="w-10 h-10 rounded-lg bg-brand-600/20 text-brand-400 flex items-center justify-center flex-shrink-0">
+                                                <i data-lucide="file-code" class="w-5 h-5"></i>
+                                            </div>
+                                            <div class="overflow-hidden">
+                                                <p id="previewFileName" class="text-xs font-semibold text-white truncate">mon_script.py</p>
+                                                <p id="previewFileSize" class="text-[10px] text-slate-400">12.4 Ko</p>
+                                            </div>
+                                        </div>
+                                        <button type="button" id="removeFileBtn" class="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors">
+                                            <i data-lucide="x" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Barre de Progression Téléversement -->
+                            <div id="uploadProgressContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between text-xs text-slate-400">
+                                    <span id="uploadProgressLabel">Envoi vers Supabase Storage...</span>
+                                    <span id="uploadProgressPercent">0%</span>
+                                </div>
+                                <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden">
+                                    <div id="uploadProgressBar" class="bg-brand-500 h-full rounded-full w-0 transition-all duration-300"></div>
+                                </div>
+                            </div>
+
+                            <!-- Alert Box -->
+                            <div id="uploadAlert" class="hidden p-3 rounded-xl text-xs"></div>
+
+                            <!-- Bouton Soumission -->
+                            <button type="submit" id="submitDeliverableBtn" disabled class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                                <i data-lucide="send" class="w-4 h-4"></i>
+                                <span>Soumettre pour Évaluation</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- COLONNE DROITE : HISTORIQUE DES SOUMISSIONS & TEMPS RÉEL (7 cols) -->
+                <div class="lg:col-span-7 space-y-6">
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl">
+                        <div class="flex items-center justify-between mb-5">
+                            <div>
+                                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                    <i data-lucide="history" class="w-5 h-5 text-indigo-400"></i>
+                                    Historique de vos Soumissions
+                                </h3>
+                                <p class="text-xs text-slate-400">Mise à jour instantanée dès validation par le professeur</p>
+                            </div>
+                            <button id="refreshSubmissionsBtn" title="Actualiser" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors">
+                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+
+                        <!-- Tableau / Liste des Soumissions -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                                        <th class="pb-3 px-2">Séance</th>
+                                        <th class="pb-3 px-2">Fichier</th>
+                                        <th class="pb-3 px-2">Statut</th>
+                                        <th class="pb-3 px-2 text-right">Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="submissionsTableBody" class="divide-y divide-slate-800/60 font-medium">
+                                    <!-- Rempli par JavaScript -->
+                                    <tr id="emptySubmissionsRow">
+                                        <td colspan="4" class="py-12 text-center text-slate-500">
+                                            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+                                            Aucun devoir soumis pour le moment.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© EdTech CodeLab - Architecture Supabase (RLS & Temps Réel)</span>
+            <span>Frontend Statique GitHub Pages</span>
+        </div>
+    </footer>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Scripts de l'application -->
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
