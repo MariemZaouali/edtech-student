@@ -55,26 +55,12 @@ window.SUPABASE_CONFIG = {
                     templateFilename: "optimizer_submission_template.json",
                     templateContent: JSON.stringify({
                         topic: "Vanilla Gradient, SGD, AdamW",
-                        student: "etudiant@univ.fr",
-                        vanilla_gradient: {
-                            definition: "Descente de gradient classique (Batch Gradient Descent) calculée sur l'intégralité du dataset.",
-                            mechanism: "Mise à jour déterministe θ = θ - η * ∇L(θ). Vitesse stable mais coûteuse en mémoire et sensible aux plateaux/minima locaux."
-                        },
-                        sgd: {
-                            definition: "Stochastic Gradient Descent avec mini-batchs.",
-                            mechanism: "Gradient bruité agissant comme régularisateur naturel. Utilisation du Momentum pour accélérer la convergence dans les ravines."
-                        },
-                        adamw: {
-                            definition: "Optimiseur adaptatif avec découplage du Weight Decay.",
-                            mechanism: "Combinaison des moyennes mobiles du gradient (moment 1) et du carré des gradients (moment 2). Découplage strict de la régularisation L2 et de la mise à jour adaptative (Loshchilov & Hutter 2017)."
-                        },
-                        comparison_and_critical_thinking: "AdamW converge beaucoup plus vite sur les Transformers et LLMs mais nécessite 2 tenseurs d'état supplémentaires (mémoire x3). SGD généralise parfois mieux sur les architectures CNN classiques de vision.",
-                        formulas_and_support: "Vanilla: θ_{t+1} = θ_t - η ∇L(θ_t) | SGD+Momentum: v_{t+1} = γ v_t + η ∇L(θ_t) | AdamW: θ_{t+1} = θ_t(1 - η λ) - η m̂_t / (√v̂_t + ε)",
-                        sources_and_reproducibility: [
-                            "Loshchilov & Hutter (2017) Decoupled Weight Decay Regularization (AdamW)",
-                            "Kingma & Ba (2014) Adam: A Method for Stochastic Optimization",
-                            "Documentation PyTorch: torch.optim.AdamW et torch.optim.SGD"
-                        ]
+                        student_email: "votre.email@etudiant.univ.fr",
+                        analysis: {
+                            vanilla_gradient: "Décrivez ici le fonctionnement, les caractéristiques et les limites de Vanilla Gradient...",
+                            sgd: "Décrivez ici le fonctionnement de SGD et ses variantes (bruit stochastique, momentum...)...",
+                            adamw: "Décrivez ici le fonctionnement d'AdamW et la spécificité du découplage du Weight Decay..."
+                        }
                     }, null, 2)
                 },
                 {
