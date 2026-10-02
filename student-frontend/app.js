@@ -156,7 +156,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function getCurrentAssignment() {
-        const title = assignmentSelect ? assignmentSelect.value.split(' (')[0] : '';
+        // Use the raw select value — option values are set to item.title directly.
+        // Do NOT split on ' (' because some titles contain parentheses (LSTM, QCM).
+        const title = assignmentSelect ? assignmentSelect.value : '';
         return config.ASSIGNMENTS?.find(a => a.title === title) || config.ASSIGNMENTS?.[0];
     }
 
@@ -550,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showAlert(qcmAlert, `✅ <strong>QCM Enregistré avec succès !</strong><br/>Tentative <strong>${attemptNumber}/${maxAttempts}</strong> (${answeredCount}/${totalQuestions} questions répondues en ${Math.floor(timeSpent/60)}m ${timeSpent%60}s). Votre copie a été transmise à l'enseignant pour correction.${timeoutNotice}`, "success");
 
             isQcmActive = false;
-            await fetchMySubmissions();
+            await fetchSubmissions();
             updateExerciseCard();
 
         } catch (err) {
