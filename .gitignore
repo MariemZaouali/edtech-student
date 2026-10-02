@@ -1,0 +1,29 @@
+# Fichiers sensibles - NE JAMAIS COMMITER
+teacher-dashboard/.env
+teacher-dashboard/__pycache__/
+teacher-dashboard/*.pyc
+teacher-dashboard/.streamlit/secrets.toml
+
+# Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log

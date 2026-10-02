@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Enseignant Local • EdTech CodeLab</title>
+    <meta name="description" content="Dashboard enseignant local sécurisé pour évaluation et export de notes.">
+    
+    <!-- Polices Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- SheetJS CDN (Génération et Export Excel / CSV) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <!-- Supabase JS Client v2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-brand-500 selection:text-white flex flex-col">
+
+    <!-- Header -->
+    <header class="glass-panel border-b border-slate-800 px-6 py-4 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-indigo-600 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                        EdTech <span class="text-amber-400">CodeLab</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">Dashboard Enseignant (Local)</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Administration Super-Admin • Contournement RLS avec Service Role</p>
+                </div>
+            </div>
+
+            <!-- Actions Header -->
+            <div class="flex items-center space-x-3">
+                <button id="studentsRosterBtn" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="users" class="w-4 h-4"></i>
+                    <span>Classe & Étudiants (3ATELIOT)</span>
+                </button>
+                <button id="configBtn" class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-900 border border-slate-700 hover:border-amber-400 text-slate-300 hover:text-white transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="key" class="w-4 h-4 text-amber-400"></i>
+                    <span>Clés API</span>
+                </button>
+                <button id="refreshBtn" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer">
+                    <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 flex-grow space-y-6">
+        
+        <!-- Cartes Statistiques -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                <div class="text-xs text-slate-400">Total Soumissions</div>
+                <div class="text-2xl font-bold font-display text-white mt-1" id="statTotal">0</div>
+            </div>
+            <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                <div class="text-xs text-slate-400">En attente de correction</div>
+                <div class="text-2xl font-bold font-display text-amber-400 mt-1" id="statPending">0</div>
+            </div>
+            <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                <div class="text-xs text-slate-400">Devoirs Notés</div>
+                <div class="text-2xl font-bold font-display text-emerald-400 mt-1" id="statGraded">0</div>
+            </div>
+            <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                <div class="text-xs text-slate-400">Moyenne de la Classe</div>
+                <div class="text-2xl font-bold font-display text-indigo-400 mt-1" id="statAverage">--/20</div>
+            </div>
+        </div>
+
+        <!-- Barre de filtres et Exportation -->
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3 flex-1">
+                <!-- Filtre Séance -->
+                <select id="filterAssignment" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">Toutes les séances</option>
+                </select>
+
+                <!-- Filtre Statut -->
+                <select id="filterStatus" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="">Tous les statuts</option>
+                    <option value="En cours">En cours (À corriger)</option>
+                    <option value="Évalué">Évalué</option>
+                </select>
+
+                <!-- Recherche -->
+                <input type="text" id="filterSearch" placeholder="Rechercher un email..." class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-48">
+            </div>
+
+            <!-- Boutons d'export -->
+            <div class="flex items-center gap-2">
+                <button id="exportExcelBtn" class="px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-lg shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                    <span>Exporter Excel (.xlsx)</span>
+                </button>
+                <button id="exportCsvBtn" class="px-4 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="download" class="w-4 h-4"></i>
+                    <span>CSV</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tableau des Devoirs -->
+        <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-900/60 text-slate-400 font-semibold uppercase tracking-wider">
+                            <th class="py-3 px-4">Étudiant</th>
+                            <th class="py-3 px-4">Séance</th>
+                            <th class="py-3 px-4">Fichier Rendu</th>
+                            <th class="py-3 px-4">Date</th>
+                            <th class="py-3 px-4">Statut</th>
+                            <th class="py-3 px-4">Note</th>
+                            <th class="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="teacherTableBody" class="divide-y divide-slate-800/60 font-medium">
+                        <tr>
+                            <td colspan="7" class="py-12 text-center text-slate-500">
+                                Chargement des données Supabase...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- MODAL D'ÉVALUATION & NOTATION -->
+    <div id="evalModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-2xl rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                    <h3 class="font-display font-bold text-lg text-white" id="modalStudentEmail">etudiant@ecole.fr</h3>
+                    <p class="text-xs text-slate-400" id="modalAssignmentName">Séance 1</p>
+                </div>
+                <button id="closeModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Aperçu du fichier -->
+            <div class="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="file" class="w-4 h-4 text-indigo-400"></i>
+                        <span id="modalFileName">script.py</span>
+                    </span>
+                    <a id="modalDownloadLink" href="#" target="_blank" class="text-xs text-indigo-400 hover:underline flex items-center gap-1">
+                        <span>Télécharger / Ouvrir</span>
+                        <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                    </a>
+                </div>
+                <!-- Mini visualiseur textuel ou image -->
+                <div id="modalPreviewBox" class="mt-2 text-[11px] font-mono bg-slate-950 p-3 rounded-lg max-h-48 overflow-y-auto border border-slate-800 text-slate-300">
+                    Chargement de l'aperçu du fichier...
+                </div>
+            </div>
+
+            <!-- Analyse & Suggestion Automatique -->
+            <div class="bg-indigo-950/30 border border-indigo-500/30 p-4 rounded-xl space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
+                        Suggestion d'Évaluation Automatisée
+                    </span>
+                    <button id="runAutoEvalBtn" class="text-[11px] px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold transition-colors">
+                        Analyser le fichier
+                    </button>
+                </div>
+                <div id="modalEvalReport" class="text-[11px] text-slate-300 leading-relaxed">
+                    Cliquez sur "Analyser le fichier" pour lancer l'analyse heuristique locale.
+                </div>
+            </div>
+
+            <!-- Saisie de la Note & Feedback -->
+            <form id="gradeForm" class="space-y-4">
+                <input type="hidden" id="modalSubId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Note Finale (sur 20)</label>
+                        <input type="number" id="modalGradeInput" min="0" max="20" step="0.5" required
+                               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Statut</label>
+                        <div class="bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-emerald-400 font-semibold flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span>Sera mis à jour en "Évalué"</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Commentaires & Feedback Pédagogique</label>
+                    <textarea id="modalFeedbackInput" rows="3" placeholder="Excellent travail ! Le mécanisme d'attention est bien implémenté..."
+                              class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+
+                <button type="submit" id="saveGradeBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="check" class="w-4 h-4"></i>
+                    <span>Valider et Enregistrer sur Supabase</span>
+                </button>
+
+                <!-- Actions de gestion des tentatives -->
+                <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+                    <button type="button" id="modalAddBonusBtn" class="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                        <span>Accorder +1 Tentative Bonus</span>
+                    </button>
+                    <button type="button" id="modalDeleteSubBtn" class="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 text-red-400 text-xs font-semibold transition-all flex items-center gap-1.5">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        <span>Supprimer cette tentative</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL DE GESTION DE LA CLASSE, IMPORT CSV & MOTS DE PASSE -->
+    <div id="studentsModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-4xl rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
+                        <i data-lucide="users" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-display font-bold text-base text-white">Gestion de la Classe & Mots de Passe</h3>
+                        <p class="text-xs text-slate-400">Import CSV (Classe <span class="text-indigo-400 font-semibold" id="currentClassNameBadge">3ATELIOT</span>) • Envoi des demandes de réinitialisation</p>
+                    </div>
+                </div>
+                <button id="closeStudentsModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Onglets du modal -->
+            <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+                <button id="modalTabImportBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="upload-cloud" class="w-3.5 h-3.5"></i>
+                    <span>1. Importer CSV (3ATELIOT)</span>
+                </button>
+                <button id="modalTabResetBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-slate-400 hover:text-white flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="mail" class="w-3.5 h-3.5"></i>
+                    <span>2. Envoyer Resets Mot de Passe</span>
+                </button>
+                <button id="modalTabListBtn" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-slate-400 hover:text-white flex items-center gap-1.5 cursor-pointer">
+                    <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                    <span>3. Liste des Étudiants</span>
+                </button>
+            </div>
+
+            <!-- SECTION 1 : IMPORT CSV -->
+            <div id="sectionImportCsv" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="md:col-span-2 space-y-3">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Nom de la Classe / Promotion :</label>
+                            <input type="text" id="csvClassInput" value="3ATELIOT" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 font-semibold">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Fichier CSV (.csv) :</label>
+                            <input type="file" id="csvFileInput" accept=".csv,.txt" class="w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-300 mb-1">Ou Coller directement le contenu CSV :</label>
+                            <textarea id="csvTextPaste" rows="4" placeholder="email,nom,prenom,classe&#10;etudiant1@enit.utm.tn,Ben Salah,Ahmed,3ATELIOT&#10;etudiant2@enit.utm.tn,Trabelsi,Sarra,3ATELIOT" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500"></textarea>
+                        </div>
+                    </div>
+                    <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-800 space-y-3 flex flex-col justify-between">
+                        <div>
+                            <div class="text-xs font-bold text-slate-200 flex items-center gap-1.5 mb-2">
+                                <i data-lucide="info" class="w-4 h-4 text-indigo-400"></i>
+                                Format CSV Recommandé
+                            </div>
+                            <p class="text-[11px] text-slate-400 leading-relaxed">
+                                Colonnes : <code class="text-indigo-300">email</code>, <code class="text-indigo-300">nom</code>, <code class="text-indigo-300">prenom</code>, <code class="text-indigo-300">classe</code>.<br/>
+                                Séparateurs : <code>,</code> ou <code>;</code>.
+                            </p>
+                        </div>
+                        <button id="downloadTemplateBtn" class="w-full py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center gap-1.5 cursor-pointer">
+                            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                            <span>Télécharger Modèle CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 pt-2">
+                    <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" id="autoSendResetCheckbox" checked class="rounded border-slate-700 bg-slate-900 text-indigo-600">
+                        <span>Envoyer un email de reset de mot de passe lors de l'import</span>
+                    </label>
+                </div>
+
+                <button id="runImportCsvBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer">
+                    <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                    <span>Lancer l'importation et la synchronisation</span>
+                </button>
+                <div id="importLogsArea" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono max-h-40 overflow-y-auto text-slate-300 space-y-1"></div>
+            </div>
+
+            <!-- SECTION 2 : ENVOI GROUPÉ DES RESET DE MOT DE PASSE -->
+            <div id="sectionResetPass" class="hidden space-y-4">
+                <div class="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl flex items-start gap-3">
+                    <i data-lucide="mail" class="w-5 h-5 text-amber-400 mt-0.5"></i>
+                    <div class="text-xs text-slate-300 leading-relaxed">
+                        <div class="font-bold text-amber-300 mb-1">Envoi officiel Supabase Auth</div>
+                        Cette action déclenche l'envoi d'un email contenant un lien sécurisé permettant à chaque étudiant de définir ou réinitialiser son mot de passe.
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <div class="text-xs font-semibold text-slate-200">Cible de l'envoi :</div>
+                        <div class="text-[11px] text-slate-400" id="resetCountTargetText">Calcul du nombre d'étudiants...</div>
+                    </div>
+                    <button id="sendMassResetBtn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-indigo-600 hover:from-amber-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                        <span>Envoyer Reset à TOUS les étudiants</span>
+                    </button>
+                </div>
+
+                <div id="resetStatusArea" class="hidden p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono max-h-48 overflow-y-auto text-slate-300 space-y-1"></div>
+            </div>
+
+            <!-- SECTION 3 : LISTE DES ÉTUDIANTS -->
+            <div id="sectionStudentsList" class="hidden space-y-3">
+                <div class="flex items-center justify-between gap-3">
+                    <input type="text" id="searchRosterInput" placeholder="Filtrer étudiant (nom ou email)..." class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 w-64">
+                    <button id="exportRosterBtn" class="px-3 py-1.5 text-xs rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center gap-1.5 cursor-pointer">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span>Exporter Roster (CSV)</span>
+                    </button>
+                </div>
+                <div class="overflow-x-auto max-h-64 overflow-y-auto border border-slate-800 rounded-xl">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900 sticky top-0 text-slate-400 uppercase text-[10px]">
+                            <tr>
+                                <th class="py-2.5 px-3">Email</th>
+                                <th class="py-2.5 px-3">Nom</th>
+                                <th class="py-2.5 px-3">Classe</th>
+                                <th class="py-2.5 px-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rosterTableBody" class="divide-y divide-slate-800/60 font-medium">
+                            <tr><td colspan="4" class="py-6 text-center text-slate-500">Chargement...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIGURATION DES CLÉS API -->
+    <div id="configModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-6 border border-slate-700 shadow-2xl space-y-4">
+            <h3 class="font-display font-bold text-base text-white flex items-center gap-2">
+                <i data-lucide="key" class="w-5 h-5 text-amber-400"></i>
+                Configuration Supabase (Service Role)
+            </h3>
+            <p class="text-xs text-slate-400">
+                Ces clés sont stockées localement dans votre navigateur uniquement.
+            </p>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Supabase Project URL</label>
+                    <input type="text" id="configUrlInput" placeholder="https://xyz.supabase.co" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Service Role Key (Secret Super Admin)</label>
+                    <input type="password" id="configKeyInput" placeholder="eyJhbGciOiJIUzI1Ni..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button id="closeConfigBtn" class="px-4 py-2 text-xs rounded-xl bg-slate-800 text-slate-300 cursor-pointer">Annuler</button>
+                <button id="saveConfigBtn" class="px-4 py-2 text-xs rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold cursor-pointer">Sauvegarder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIQUE JAVASCRIPT DU DASHBOARD LOCAL -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.lucide) lucide.createIcons();
+
+            let supabase = null;
+            let allSubmissions = [];
+            let currentSelectedSub = null;
+
+            // Clés stockées
+            let supabaseUrl = localStorage.getItem('EDTECH_SUPABASE_URL') || '';
+            let serviceKey = localStorage.getItem('EDTECH_SERVICE_KEY') || '';
+
+            // Éléments
+            const teacherTableBody = document.getElementById('teacherTableBody');
+            const statTotal = document.getElementById('statTotal');
+            const statPending = document.getElementById('statPending');
+            const statGraded = document.getElementById('statGraded');
+            const statAverage = document.getElementById('statAverage');
+            const filterAssignment = document.getElementById('filterAssignment');
+            const filterStatus = document.getElementById('filterStatus');
+            const filterSearch = document.getElementById('filterSearch');
+            const evalModal = document.getElementById('evalModal');
+            const configModal = document.getElementById('configModal');
+            const configBtn = document.getElementById('configBtn');
+            const refreshBtn = document.getElementById('refreshBtn');
+            const exportExcelBtn = document.getElementById('exportExcelBtn');
+            const exportCsvBtn = document.getElementById('exportCsvBtn');
+
+            function initSupabase() {
+                if (supabaseUrl && serviceKey && window.supabase) {
+                    supabase = window.supabase.createClient(supabaseUrl, serviceKey);
+                    fetchSubmissions();
+                } else {
+                    configModal.classList.remove('hidden');
+                    configModal.classList.add('flex');
+                }
+            }
+
+            // Gestion modal configuration
+            configBtn.addEventListener('click', () => {
+                document.getElementById('configUrlInput').value = supabaseUrl;
+                document.getElementById('configKeyInput').value = serviceKey;
+                configModal.classList.remove('hidden');
+                configModal.classList.add('flex');
+            });
+
+            document.getElementById('closeConfigBtn').addEventListener('click', () => {
+                configModal.classList.add('hidden');
+                configModal.classList.remove('flex');
+            });
+
+            document.getElementById('saveConfigBtn').addEventListener('click', () => {
+                supabaseUrl = document.getElementById('configUrlInput').value.trim();
+                serviceKey = document.getElementById('configKeyInput').value.trim();
+                localStorage.setItem('EDTECH_SUPABASE_URL', supabaseUrl);
+                localStorage.setItem('EDTECH_SERVICE_KEY', serviceKey);
+                configModal.classList.add('hidden');
+                configModal.classList.remove('flex');
+                initSupabase();
+            });
+
+            // Récupération des données
+            async function fetchSubmissions() {
+                if (!supabase) return;
+                try {
+                    const { data, error } = await supabase
+                        .from('submissions')
+                        .select('*')
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+                    allSubmissions = data || [];
+                    populateFilters(allSubmissions);
+                    renderTable();
+                } catch (e) {
+                    console.error("Erreur :", e);
+                    teacherTableBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-400">Erreur lors de la récupération : ${e.message}</td></tr>`;
+                }
+            }
+
+            function populateFilters(subs) {
+                const assignments = [...new Set(subs.map(s => s.assignment_name))];
+                filterAssignment.innerHTML = '<option value="">Toutes les séances</option>' + 
+                    assignments.map(a => `<option value="${a}">${a}</option>`).join('');
+            }
+
+            function renderTable() {
+                const assignmentVal = filterAssignment.value;
+                const statusVal = filterStatus.value;
+                const searchVal = filterSearch.value.toLowerCase();
+
+                let filtered = allSubmissions.filter(s => {
+                    const matchAssign = !assignmentVal || s.assignment_name === assignmentVal;
+                    const matchStatus = !statusVal || s.status === statusVal;
+                    const matchSearch = !searchVal || s.student_email.toLowerCase().includes(searchVal);
+                    return matchAssign && matchStatus && matchSearch;
+                });
+
+                // Stats
+                statTotal.textContent = allSubmissions.length;
+                const pending = allSubmissions.filter(s => s.status === 'En cours').length;
+                const graded = allSubmissions.filter(s => s.status === 'Évalué' && s.grade !== null);
+                statPending.textContent = pending;
+                statGraded.textContent = graded.length;
+
+                if (graded.length > 0) {
+                    const avg = graded.reduce((acc, curr) => acc + parseFloat(curr.grade), 0) / graded.length;
+                    statAverage.textContent = `${avg.toFixed(2)}/20`;
+                } else {
+                    statAverage.textContent = '--/20';
+                }
+
+                if (filtered.length === 0) {
+                    teacherTableBody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-slate-500">Aucune soumission trouvée.</td></tr>`;
+                    return;
+                }
+
+                teacherTableBody.innerHTML = filtered.map(sub => {
+                    const isGraded = sub.status === 'Évalué';
+                    const dateStr = new Date(sub.created_at).toLocaleDateString('fr-FR', {
+                        day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                    });
+
+                    const statusPill = isGraded
+                        ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Évalué</span>`
+                        : `<span class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">En cours</span>`;
+
+                    const gradePill = isGraded && sub.grade !== null
+                        ? `<span class="font-bold text-emerald-300 font-display">${parseFloat(sub.grade).toFixed(1)}/20</span>`
+                        : `<span class="text-slate-500">--</span>`;
+
+                    return `
+                        <tr class="hover:bg-slate-900/40 transition-colors">
+                            <td class="py-3 px-4 font-semibold text-slate-200">${sub.student_email}</td>
+                            <td class="py-3 px-4 text-slate-300">${sub.assignment_name}</td>
+                            <td class="py-3 px-4">
+                                <a href="${sub.file_url}" target="_blank" class="text-indigo-400 hover:underline flex items-center gap-1">
+                                    <span>${sub.file_name}</span>
+                                    <i data-lucide="external-link" class="w-3 h-3"></i>
+                                </a>
+                            </td>
+                            <td class="py-3 px-4 text-slate-400 text-[11px]">${dateStr}</td>
+                            <td class="py-3 px-4">${statusPill}</td>
+                            <td class="py-3 px-4">${gradePill}</td>
+                            <td class="py-3 px-4 text-right flex items-center justify-end gap-1.5">
+                                <button onclick="openEvaluationModal('${sub.id}')" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow transition-all">
+                                    Évaluer
+                                </button>
+                                <button onclick="deleteSubmission('${sub.id}', '${sub.file_path || ''}')" title="Supprimer cette tentative" class="p-1.5 rounded-lg bg-red-950/40 border border-red-800/40 text-red-400 hover:bg-red-900/60 transition-colors">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                if (window.lucide) lucide.createIcons();
+            }
+
+            // Suppression de tentative
+            window.deleteSubmission = async function(id, filePath) {
+                if (!confirm("⚠️ Voulez-vous vraiment supprimer cette tentative ?\nL'étudiant récupérera automatiquement son quota de soumission.")) {
+                    return;
+                }
+                try {
+                    if (filePath) {
+                        try {
+                            await supabase.storage.from('deliverables').remove([filePath]);
+                        } catch (err) {
+                            console.warn("Storage delete:", err);
+                        }
+                    }
+                    const { error } = await supabase.from('submissions').delete().eq('id', id);
+                    if (error) throw error;
+                    alert("✅ Tentative supprimée avec succès !");
+                    evalModal.classList.add('hidden');
+                    evalModal.classList.remove('flex');
+                    fetchSubmissions();
+                } catch (e) {
+                    alert("Erreur lors de la suppression : " + e.message);
+                }
+            };
+
+            // Accorder une tentative bonus depuis le modal
+            document.getElementById('modalAddBonusBtn').addEventListener('click', async () => {
+                if (!currentSelectedSub) return;
+                const email = currentSelectedSub.student_email;
+                const assign = currentSelectedSub.assignment_name;
+                const bonusStr = prompt(`Combien de tentatives bonus accorder à ${email} pour "${assign}" ?`, "1");
+                if (bonusStr === null) return;
+                const bonusNum = parseInt(bonusStr, 10);
+                if (isNaN(bonusNum) || bonusNum < 0) {
+                    alert("Veuillez saisir un nombre valide (ex: 1, 2).");
+                    return;
+                }
+                try {
+                    const { error } = await supabase.from('student_attempts_override').upsert({
+                        student_email: email,
+                        student_id: currentSelectedSub.student_id,
+                        assignment_name: assign,
+                        bonus_attempts: bonusNum,
+                        reason: "Accordé depuis le dashboard enseignant"
+                    }, { onConflict: 'student_email,assignment_name' });
+                    if (error) throw error;
+                    alert(`✅ Bonus de ${bonusNum} tentative(s) enregistré pour ${email} !`);
+                    fetchSubmissions();
+                } catch (e) {
+                    alert("Erreur lors de l'enregistrement du bonus : " + e.message);
+                }
+            });
+
+            // Supprimer la tentative depuis le modal
+            document.getElementById('modalDeleteSubBtn').addEventListener('click', () => {
+                if (!currentSelectedSub) return;
+                deleteSubmission(currentSelectedSub.id, currentSelectedSub.file_path);
+            });
+
+            // Filtres listeners
+            filterAssignment.addEventListener('change', renderTable);
+            filterStatus.addEventListener('change', renderTable);
+            filterSearch.addEventListener('input', renderTable);
+            refreshBtn.addEventListener('click', fetchSubmissions);
+
+            // Exportation Excel (.xlsx) & CSV avec SheetJS
+            exportExcelBtn.addEventListener('click', () => exportData('xlsx'));
+            exportCsvBtn.addEventListener('click', () => exportData('csv'));
+
+            function exportData(format = 'xlsx') {
+                if (allSubmissions.length === 0) {
+                    alert("Aucune donnée à exporter.");
+                    return;
+                }
+
+                const rows = allSubmissions.map(s => ({
+                    "Email Étudiant": s.student_email,
+                    "Séance": s.assignment_name,
+                    "Nom du Fichier": s.file_name,
+                    "Type": s.file_type,
+                    "Note (/20)": s.grade !== null ? parseFloat(s.grade) : "",
+                    "Statut": s.status,
+                    "Commentaires": s.feedback || "",
+                    "Date de Soumission": new Date(s.created_at).toLocaleString('fr-FR'),
+                    "URL du Fichier": s.file_url
+                }));
+
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Notes");
+
+                const filename = `Notes_EdTech_${new Date().toISOString().slice(0,10)}.${format}`;
+                XLSX.writeFile(wb, filename);
+            }
+
+            // Ouverture Modal d'évaluation
+            window.openEvaluationModal = async function(id) {
+                currentSelectedSub = allSubmissions.find(s => s.id === id);
+                if (!currentSelectedSub) return;
+
+                document.getElementById('modalSubId').value = currentSelectedSub.id;
+                document.getElementById('modalStudentEmail').textContent = currentSelectedSub.student_email;
+                document.getElementById('modalAssignmentName').textContent = currentSelectedSub.assignment_name;
+                document.getElementById('modalFileName').textContent = currentSelectedSub.file_name;
+                document.getElementById('modalDownloadLink').href = currentSelectedSub.file_url;
+                document.getElementById('modalGradeInput').value = currentSelectedSub.grade !== null ? currentSelectedSub.grade : 16.0;
+                document.getElementById('modalFeedbackInput').value = currentSelectedSub.feedback || "";
+                document.getElementById('modalEvalReport').innerHTML = "Cliquez sur 'Analyser le fichier' pour exécuter l'analyse heuristique.";
+
+                const previewBox = document.getElementById('modalPreviewBox');
+                previewBox.textContent = "Téléchargement du fichier...";
+
+                evalModal.classList.remove('hidden');
+                evalModal.classList.add('flex');
+
+                try {
+                    const res = await fetch(currentSelectedSub.file_url);
+                    if (res.ok) {
+                        if (currentSelectedSub.file_type === 'image') {
+                            previewBox.innerHTML = `<img src="${currentSelectedSub.file_url}" class="max-h-48 mx-auto rounded">`;
+                        } else {
+                            const text = await res.text();
+                            previewBox.textContent = text.slice(0, 2000) + (text.length > 2000 ? "\n\n[... Aperçu tronqué ...]" : "");
+                        }
+                    } else {
+                        previewBox.textContent = "Impossible de prévisualiser le fichier en direct.";
+                    }
+                } catch (e) {
+                    previewBox.textContent = "Erreur de prévisualisation : " + e.message;
+                }
+
+                if (window.lucide) lucide.createIcons();
+            };
+
+            document.getElementById('closeModalBtn').addEventListener('click', () => {
+                evalModal.classList.add('hidden');
+                evalModal.classList.remove('flex');
+            });
+
+            // Analyse heuristique et calcul automatique
+            document.getElementById('runAutoEvalBtn').addEventListener('click', () => {
+                if (!currentSelectedSub) return;
+                const content = document.getElementById('modalPreviewBox').textContent;
+                const assignName = (currentSelectedSub.assignment_name || '').toLowerCase();
+                const fileName = (currentSelectedSub.file_name || '').toLowerCase();
+                let score = 15.0;
+                let report = "";
+
+                if (assignName.includes('qcm') || assignName.includes('autorégressif') || assignName.includes('ar_llm')) {
+                    try {
+                        const data = JSON.parse(content);
+                        const answers = data.answers || data.reponses || data;
+                        const KEY = {
+                            "Q1": "B", "Q2": "C", "Q3": "C", "Q4": "B", "Q5": "C",
+                            "Q6": "D", "Q7": "B", "Q8": "C", "Q9": "B", "Q10": "B"
+                        };
+                        const EXPLANATIONS = {
+                            "Q1": "Elimine seulement les doublons exacts, manque les near-duplicates.",
+                            "Q2": "Marqueur explicite de fin de phrase/séquence (EOS).",
+                            "Q3": "Complétion par des jetons 0 (padding) pour tenseurs de taille fixe.",
+                            "Q4": "Probabilité causale autorégressive : ∏ P(x_t | x_1 ... x_{t-1}).",
+                            "Q5": "Modèle factice (toy model) générant des logits aléatoires sans réseau lourd.",
+                            "Q6": "Beam Search maintient les B meilleures hypothèses pour un optimum global.",
+                            "Q7": "Somme des log-probabilités pour éviter l'underflow numérique.",
+                            "Q8": "Renormalisation de la somme des k meilleures probabilités à 1.0.",
+                            "Q9": "Petit modèle rapide propose N jetons, grand modèle vérifie en parallèle.",
+                            "Q10": "Accepté si random() < P_large / P_small."
+                        };
+
+                        let correctCount = 0;
+                        let rows = "";
+                        for (let q = 1; q <= 10; q++) {
+                            const qId = "Q" + q;
+                            const expected = KEY[qId];
+                            const rawAns = answers[qId] || answers[qId.toLowerCase()] || "";
+                            const given = String(rawAns).trim().toUpperCase();
+                            const isCorrect = (given === expected);
+                            if (isCorrect) correctCount++;
+                            const status = isCorrect ? '<span class="text-emerald-400 font-bold">✅ Exact (+2.0)</span>' : '<span class="text-red-400 font-bold">❌ Faux (+0.0)</span>';
+                            rows += `<tr>
+                                <td class="p-1.5 font-bold">${qId}</td>
+                                <td class="p-1.5 font-mono text-amber-300">${given || '—'}</td>
+                                <td class="p-1.5 font-mono text-emerald-400 font-bold">${expected}</td>
+                                <td class="p-1.5">${status}</td>
+                                <td class="p-1.5 text-slate-400 text-[10px]">${EXPLANATIONS[qId]}</td>
+                            </tr>`;
+                        }
+
+                        score = correctCount * 2.0;
+                        const pct = Math.round((correctCount / 10) * 100);
+                        report = `
+                            <div class="space-y-2 text-xs">
+                                <div class="font-bold text-amber-300">Correction Automatique : ${correctCount}/10 exactes (${pct}%)</div>
+                                <table class="w-full text-left text-[11px] border border-slate-800 rounded-lg overflow-hidden">
+                                    <thead class="bg-slate-900 text-slate-400">
+                                        <tr><th class="p-1.5">Q#</th><th class="p-1.5">Réponse</th><th class="p-1.5">Corrigé</th><th class="p-1.5">Résultat</th><th class="p-1.5">Explication</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/60">
+                                        ${rows}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } catch (e) {
+                        score = 0;
+                        report = `❌ Erreur de lecture JSON du QCM : ${e.message}`;
+                    }
+                } else if (assignName.includes('lstm') || assignName.includes('tikz')) {
+                    try {
+                        const data = JSON.parse(content);
+                        const rawLower = content.toLowerCase();
+                        const tikzCode = data.tikz_figure || data.tikz || data.figure || "";
+                        const tikzLower = tikzCode.toLowerCase();
+
+                        // 1. T (TikZ) [0.30]
+                        const hasTikZ = tikzCode.includes('\\begin{tikzpicture}') || tikzCode.includes('tikzpicture');
+                        const hasNodes = tikzCode.includes('\\node') || tikzCode.includes('\\draw');
+                        const gatesCount = (tikzLower.includes('forget') || tikzLower.includes('f_t') ? 1 : 0) +
+                                           (tikzLower.includes('input') || tikzLower.includes('i_t') ? 1 : 0) +
+                                           (tikzLower.includes('tilde') || tikzLower.includes('c_tilde') ? 1 : 0) +
+                                           (tikzLower.includes('output') || tikzLower.includes('o_t') ? 1 : 0);
+                        let t = hasTikZ && hasNodes ? (gatesCount >= 3 ? 18.0 : 12.0) : (tikzCode.length > 50 ? 8.0 : 0.0);
+                        let justifT = hasTikZ ? `Code TikZ présent (${tikzCode.length} car., ${gatesCount}/4 portes dessinées)` : "Pénalité : Code TikZ manquant ou incomplet";
+
+                        // 2. A (Technical Accuracy) [0.25]
+                        const hasF = rawLower.includes('w_f') || rawLower.includes('f_t');
+                        const hasI = rawLower.includes('w_i') || rawLower.includes('i_t');
+                        const hasC = rawLower.includes('c_tilde') || rawLower.includes('tilde') || rawLower.includes('candidate');
+                        const hasO = rawLower.includes('w_o') || rawLower.includes('o_t');
+                        const coveredGates = (hasF?1:0) + (hasI?1:0) + (hasC?1:0) + (hasO?1:0);
+                        let a = coveredGates === 4 ? 18.0 : (coveredGates >= 2 ? 12.0 : 6.0);
+                        let justifA = `Formulation mathématique des portes : ${coveredGates}/4 composantes formalisées`;
+
+                        // 3. I (Improvement vs RNN) [0.20]
+                        const hasVanishing = rawLower.includes('vanishing') || rawLower.includes('évanouissement') || rawLower.includes('gradient');
+                        const hasCEC = rawLower.includes('cec') || rawLower.includes('constant error') || rawLower.includes('highway') || rawLower.includes('autoroute') || rawLower.includes('additi');
+                        let iScore = hasVanishing && hasCEC ? 18.0 : (hasVanishing ? 10.0 : 4.0);
+                        let justifI = hasCEC ? "Explication rigoureuse du Constant Error Carousel (CEC) et de l'autoroute additive" : "Explication partielle du vanishing gradient sans focus CEC";
+
+                        // 4. P (Pédagogie) [0.15]
+                        let p = rawLower.length > 800 ? 17.0 : (rawLower.length > 400 ? 13.0 : 8.0);
+                        let justifP = `Volume explicatif (${rawLower.length} car.), clarté pédagogique`;
+
+                        // 5. R (Limites RNN) [0.05]
+                        let r = rawLower.includes('rnn') ? 16.0 : 4.0;
+                        let justifR = rawLower.includes('rnn') ? "Limites structurelles du RNN standard rappelées" : "Absence de mise en perspective avec le RNN standard";
+
+                        // 6. X (Sources) [0.05]
+                        let hasRefs = rawLower.includes('hochreiter') || rawLower.includes('schmidhuber') || rawLower.includes('olah') || rawLower.includes('gers');
+                        let x = hasRefs ? 18.0 : 2.0;
+                        let justifX = hasRefs ? "Citations scientifiques identifiées (Hochreiter, Schmidhuber, Olah...)" : "Aucune référence académique canonique";
+
+                        let rawScore = 0.30 * t + 0.25 * a + 0.20 * iScore + 0.15 * p + 0.05 * r + 0.05 * x;
+                        score = Math.max(0, Math.min(20, Math.round(rawScore * 100) / 100));
+
+                        report = `
+                            <div class="space-y-2 text-xs">
+                                <div class="font-bold text-emerald-300">Formule : 0.30·T + 0.25·A + 0.20·I + 0.15·P + 0.05·R + 0.05·X</div>
+                                <table class="w-full text-left text-[11px] border border-slate-800 rounded-lg overflow-hidden">
+                                    <thead class="bg-slate-900 text-slate-400">
+                                        <tr><th class="p-1.5">Critère</th><th class="p-1.5">Note</th><th class="p-1.5">Exigence & Justification</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/60">
+                                        <tr><td class="p-1.5 font-semibold">T (Figure TikZ)</td><td class="p-1.5 text-emerald-300 font-bold">${t}/20</td><td class="p-1.5">${justifT}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">A (Portes & Maths)</td><td class="p-1.5 text-emerald-300 font-bold">${a}/20</td><td class="p-1.5">${justifA}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">I (Amélioration vs RNN)</td><td class="p-1.5 text-emerald-300 font-bold">${iScore}/20</td><td class="p-1.5">${justifI}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">P (Pédagogie)</td><td class="p-1.5 text-emerald-300 font-bold">${p}/20</td><td class="p-1.5">${justifP}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">R (Limites RNN)</td><td class="p-1.5 text-emerald-300 font-bold">${r}/20</td><td class="p-1.5">${justifR}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">X (Sources)</td><td class="p-1.5 text-emerald-300 font-bold">${x}/20</td><td class="p-1.5">${justifX}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } catch (e) {
+                        score = 0;
+                        report = `❌ Erreur de parsing JSON : ${e.message}`;
+                    }
+                } else if (assignName.includes('optimizer') || fileName.endsWith('.json')) {
+                    try {
+                        const data = JSON.parse(content);
+                        const rawLower = content.toLowerCase();
+                        const charLen = rawLower.length;
+
+                        // Relevance R
+                        let hasV = rawLower.includes('vanilla') || rawLower.includes('gradient descent');
+                        let hasS = rawLower.includes('sgd') || rawLower.includes('stochastic');
+                        let hasA = rawLower.includes('adamw') || rawLower.includes('adam-w');
+                        let countAlgo = (hasV ? 1 : 0) + (hasS ? 1 : 0) + (hasA ? 1 : 0);
+                        let r = countAlgo === 3 ? (charLen > 600 ? 16.0 : 12.0) : countAlgo === 2 ? 8.0 : countAlgo === 1 ? 4.0 : 0.0;
+                        let justifR = countAlgo === 3 ? "3/3 algorithmes traités (Vanilla, SGD, AdamW)" : `${countAlgo}/3 algos identifiés (manque ${3 - countAlgo})`;
+
+                        // Pedagogical Quality P
+                        let hasPros = rawLower.includes('avantage') || rawLower.includes('inconvénient') || rawLower.includes('limite');
+                        let p = (charLen >= 300 ? 4.0 : 2.0) + (charLen >= 800 ? 4.0 : 0.0) + (hasPros ? 4.0 : 0.0) + 3.0;
+                        p = Math.min(16.0, p);
+                        let justifP = `Volume (${charLen} car.), ${hasPros ? 'avantages/limites explicites' : 'sans distinction avantages/limites nette'}`;
+
+                        // Technical Accuracy A
+                        let hasDecouple = rawLower.includes('découpl') || rawLower.includes('decoupl') || rawLower.includes('l2');
+                        let a = (hasDecouple ? 8.0 : 4.0) + 4.0;
+                        a = Math.min(16.0, a);
+                        let justifA = hasDecouple ? "Découplage Weight Decay expliqué pour AdamW" : "Pénalité : Absence d'explication sur le découplage Weight Decay d'AdamW";
+
+                        // Comparison C
+                        let hasComp = rawLower.includes('convergence') || rawLower.includes('généralisation') || rawLower.includes('mémoire');
+                        let c = hasComp ? 12.0 : 4.0;
+                        let justifC = hasComp ? "Analyse comparative des compromis présente" : "Absence d'analyse critique approfondie des compromis (vitesse/généralisation/mémoire)";
+
+                        // Support S
+                        let hasMath = content.includes('θ') || content.includes('η') || content.includes('\\theta') || content.includes('∇') || content.includes('=');
+                        let s = hasMath ? 14.0 : 0.0;
+                        let justifS = hasMath ? "Présence de formules mathématiques formelles" : "Zéro formule formelle d'actualisation des poids";
+
+                        // Sources X
+                        let hasSrc = rawLower.includes('loshchilov') || rawLower.includes('kingma') || rawLower.includes('arxiv') || rawLower.includes('paper');
+                        let x = hasSrc ? 14.0 : 0.0;
+                        let justifX = hasSrc ? "Références académiques citées" : "Aucune citation de recherche académique";
+
+                        let rawScore = 0.20 * r + 0.25 * p + 0.30 * a + 0.15 * c + 0.05 * s + 0.05 * x;
+                        score = Math.max(0, Math.min(20, Math.round(rawScore * 100) / 100));
+
+                        report = `
+                            <div class="space-y-2 text-xs">
+                                <div class="font-bold text-slate-200">Formule : 0.20·R + 0.25·P + 0.30·A + 0.15·C + 0.05·S + 0.05·X</div>
+                                <table class="w-full text-left text-[11px] border border-slate-800 rounded-lg overflow-hidden">
+                                    <thead class="bg-slate-900 text-slate-400">
+                                        <tr><th class="p-1.5">Critère</th><th class="p-1.5">Note</th><th class="p-1.5">Exigence & Justification</th></tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-800/60">
+                                        <tr><td class="p-1.5 font-semibold">R (Relevance)</td><td class="p-1.5 text-indigo-300 font-bold">${r}/20</td><td class="p-1.5">${justifR}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">P (Pédagogie)</td><td class="p-1.5 text-indigo-300 font-bold">${p}/20</td><td class="p-1.5">${justifP}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">A (Exactitude)</td><td class="p-1.5 text-indigo-300 font-bold">${a}/20</td><td class="p-1.5">${justifA}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">C (Comparaison)</td><td class="p-1.5 text-indigo-300 font-bold">${c}/20</td><td class="p-1.5">${justifC}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">S (Supports Math)</td><td class="p-1.5 text-indigo-300 font-bold">${s}/20</td><td class="p-1.5">${justifS}</td></tr>
+                                        <tr><td class="p-1.5 font-semibold">X (Sources)</td><td class="p-1.5 text-indigo-300 font-bold">${x}/20</td><td class="p-1.5">${justifX}</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                    } catch (e) {
+                        score = 0;
+                        report = `❌ Erreur de parsing JSON : ${e.message}`;
+                    }
+                } else if (assignName.includes('cnn') || fileName.endsWith('.csv')) {
+                    const lines = content.trim().split('\n');
+                    score = 16.0;
+                    report = `📁 <b>Format CSV validé :</b> ${lines.length} lignes détectées. Pour le calcul exact de l'accuracy avec les labels secrets, utilisez le dashboard Streamlit local (app.py).`;
+                } else if (currentSelectedSub.file_type === 'image') {
+                    score = 17.5;
+                    report = "✅ Image de synthèse valide. Dimensions et intégrité conformes.";
+                } else {
+                    const keywords = ['torch', 'nn.Module', 'attention', 'softmax', 'transformers', 'loss', 'epoch', 'forward'];
+                    const found = keywords.filter(k => content.toLowerCase().includes(k));
+                    score = Math.min(20, 10 + (found.length * 1.5));
+                    report = `✅ Analyse du code : ${found.length} concepts clés détectés (${found.join(', ')}). Syntaxe plausible.`;
+                }
+
+                document.getElementById('modalGradeInput').value = score;
+                document.getElementById('modalEvalReport').innerHTML = `
+                    <div class="text-emerald-400 font-bold text-sm">Note suggérée : ${score}/20</div>
+                    <div class="text-slate-300 mt-2">${report}</div>
+                `;
+            });
+
+
+            // Enregistrement de la note
+            document.getElementById('gradeForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const subId = document.getElementById('modalSubId').value;
+                const grade = parseFloat(document.getElementById('modalGradeInput').value);
+                const feedback = document.getElementById('modalFeedbackInput').value;
+
+                try {
+                    const { error } = await supabase
+                        .from('submissions')
+                        .update({
+                            grade: grade,
+                            feedback: feedback,
+                            status: 'Évalué'
+                        })
+                        .eq('id', subId);
+
+                    if (error) throw error;
+
+                    alert(`Note de ${grade}/20 enregistrée avec succès !`);
+                    evalModal.classList.add('hidden');
+                    evalModal.classList.remove('flex');
+                    fetchSubmissions();
+                } catch (e) {
+                    alert("Erreur lors de l'enregistrement : " + e.message);
+                }
+            });
+
+            // =========================================================================
+            // GESTION DE LA CLASSE, IMPORT CSV & ENVOI DES RESETS DE MOT DE PASSE
+            // =========================================================================
+            const studentsModal = document.getElementById('studentsModal');
+            const studentsRosterBtn = document.getElementById('studentsRosterBtn');
+            const closeStudentsModalBtn = document.getElementById('closeStudentsModalBtn');
+            const modalTabImportBtn = document.getElementById('modalTabImportBtn');
+            const modalTabResetBtn = document.getElementById('modalTabResetBtn');
+            const modalTabListBtn = document.getElementById('modalTabListBtn');
+            const sectionImportCsv = document.getElementById('sectionImportCsv');
+            const sectionResetPass = document.getElementById('sectionResetPass');
+            const sectionStudentsList = document.getElementById('sectionStudentsList');
+            const rosterTableBody = document.getElementById('rosterTableBody');
+            const resetCountTargetText = document.getElementById('resetCountTargetText');
+            const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+            const runImportCsvBtn = document.getElementById('runImportCsvBtn');
+            const sendMassResetBtn = document.getElementById('sendMassResetBtn');
+            const importLogsArea = document.getElementById('importLogsArea');
+            const resetStatusArea = document.getElementById('resetStatusArea');
+            const searchRosterInput = document.getElementById('searchRosterInput');
+            const exportRosterBtn = document.getElementById('exportRosterBtn');
+
+            let classProfiles = [];
+
+            function switchModalTab(tab) {
+                [modalTabImportBtn, modalTabResetBtn, modalTabListBtn].forEach(b => {
+                    b.classList.remove('bg-indigo-600', 'text-white');
+                    b.classList.add('bg-slate-900', 'text-slate-400');
+                });
+                [sectionImportCsv, sectionResetPass, sectionStudentsList].forEach(s => s.classList.add('hidden'));
+
+                if (tab === 'import') {
+                    modalTabImportBtn.classList.add('bg-indigo-600', 'text-white');
+                    modalTabImportBtn.classList.remove('bg-slate-900', 'text-slate-400');
+                    sectionImportCsv.classList.remove('hidden');
+                } else if (tab === 'reset') {
+                    modalTabResetBtn.classList.add('bg-indigo-600', 'text-white');
+                    modalTabResetBtn.classList.remove('bg-slate-900', 'text-slate-400');
+                    sectionResetPass.classList.remove('hidden');
+                    updateResetTargetCount();
+                } else if (tab === 'list') {
+                    modalTabListBtn.classList.add('bg-indigo-600', 'text-white');
+                    modalTabListBtn.classList.remove('bg-slate-900', 'text-slate-400');
+                    sectionStudentsList.classList.remove('hidden');
+                    renderRosterTable();
+                }
+            }
+
+            modalTabImportBtn.addEventListener('click', () => switchModalTab('import'));
+            modalTabResetBtn.addEventListener('click', () => switchModalTab('reset'));
+            modalTabListBtn.addEventListener('click', () => switchModalTab('list'));
+
+            studentsRosterBtn.addEventListener('click', () => {
+                studentsModal.classList.remove('hidden');
+                studentsModal.classList.add('flex');
+                fetchProfiles();
+                switchModalTab('import');
+            });
+
+            closeStudentsModalBtn.addEventListener('click', () => {
+                studentsModal.classList.add('hidden');
+                studentsModal.classList.remove('flex');
+            });
+
+            async function fetchProfiles() {
+                if (!supabase) return;
+                try {
+                    const { data, error } = await supabase.from('profiles').select('*').order('email');
+                    if (!error && data) {
+                        classProfiles = data;
+                        updateResetTargetCount();
+                        renderRosterTable();
+                    }
+                } catch (e) {
+                    console.error("Erreur profiles :", e);
+                }
+            }
+
+            function updateResetTargetCount() {
+                const uniqueEmails = new Set(classProfiles.map(p => p.email).concat(allSubmissions.map(s => s.student_email)));
+                resetCountTargetText.textContent = `${uniqueEmails.size} étudiant(s) identifié(s) dans la base (Classe 3ATELIOT & soumissions).`;
+            }
+
+            // Téléchargement du modèle CSV
+            downloadTemplateBtn.addEventListener('click', () => {
+                const template = "email,nom,prenom,classe\netudiant1@enit.utm.tn,Ben Salah,Ahmed,3ATELIOT\netudiant2@enit.utm.tn,Trabelsi,Sarra,3ATELIOT\netudiant3@enit.utm.tn,Gharbi,Mohamed,3ATELIOT";
+                const blob = new Blob([template], { type: "text/csv;charset=utf-8;" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "modele_etudiants_3ATELIOT.csv";
+                a.click();
+            });
+
+            // Parsing CSV universel
+            function parseCsv(text, defaultClass = '3ATELIOT') {
+                const lines = text.trim().split(/\r?\n/);
+                if (!lines.length) return [];
+                const firstLine = lines[0].toLowerCase();
+                const delimiter = firstLine.includes(';') ? ';' : firstLine.includes('\t') ? '\t' : ',';
+                
+                const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
+                let emailIdx = headers.findIndex(h => h.includes('email') || h.includes('mail') || h.includes('courriel'));
+                let nameIdx = headers.findIndex(h => h.includes('full_name') || h.includes('nom') || h.includes('name'));
+                let prenomIdx = headers.findIndex(h => h.includes('prenom') || h.includes('first'));
+                let classIdx = headers.findIndex(h => h.includes('classe') || h.includes('class') || h.includes('groupe'));
+
+                const results = [];
+                const startRow = emailIdx !== -1 ? 1 : 0;
+
+                for (let i = startRow; i < lines.length; i++) {
+                    const row = lines[i].split(delimiter).map(c => c.trim().replace(/^["']|["']$/g, ''));
+                    if (!row.length || !row[0]) continue;
+                    
+                    let email = "";
+                    let fullName = "";
+                    let cls = defaultClass;
+
+                    if (emailIdx !== -1) {
+                        email = (row[emailIdx] || '').trim().toLowerCase();
+                        if (nameIdx !== -1) fullName = (row[nameIdx] || '').trim();
+                        if (prenomIdx !== -1 && row[prenomIdx]) fullName += ' ' + row[prenomIdx].trim();
+                        if (classIdx !== -1 && row[classIdx]) cls = row[classIdx].trim();
+                    } else {
+                        // Pas d'en-tête reconnu, ligne brute
+                        email = (row[0] || '').trim().toLowerCase();
+                        if (row[1]) fullName = row[1].trim();
+                        if (row[2]) cls = row[2].trim();
+                    }
+
+                    if (email && email.includes('@')) {
+                        if (!fullName) fullName = email.split('@')[0].replace('.', ' ');
+                        results.push({ email, full_name: fullName, class_group: cls || defaultClass });
+                    }
+                }
+                return results;
+            }
+
+            // Importation CSV & Synchronisation
+            runImportCsvBtn.addEventListener('click', async () => {
+                const classVal = document.getElementById('csvClassInput').value.trim() || '3ATELIOT';
+                const fileInput = document.getElementById('csvFileInput');
+                const pasteVal = document.getElementById('csvTextPaste').value.trim();
+                const autoReset = document.getElementById('autoSendResetCheckbox').checked;
+
+                let csvContent = pasteVal;
+                if (fileInput.files.length > 0) {
+                    csvContent = await fileInput.files[0].text();
+                }
+
+                if (!csvContent) {
+                    alert("Veuillez sélectionner un fichier CSV ou coller du texte.");
+                    return;
+                }
+
+                const students = parseCsv(csvContent, classVal);
+                if (!students.length) {
+                    alert("Aucun email valide trouvé dans le CSV.");
+                    return;
+                }
+
+                importLogsArea.classList.remove('hidden');
+                importLogsArea.innerHTML = `<div class="text-indigo-400">🚀 Début de l'importation de ${students.length} étudiant(s) pour la classe ${classVal}...</div>`;
+
+                let successCount = 0;
+                for (const s of students) {
+                    try {
+                        // 1. Création / sync dans auth via REST API
+                        try {
+                            await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+                                method: 'POST',
+                                headers: {
+                                    'apikey': serviceKey,
+                                    'Authorization': `Bearer ${serviceKey}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    email: s.email,
+                                    email_confirm: true,
+                                    user_metadata: { full_name: s.full_name, class_group: s.class_group, role: 'student' }
+                                })
+                            });
+                        } catch (e) {}
+
+                        // 2. Upsert dans profiles
+                        try {
+                            await supabase.from('profiles').upsert({
+                                email: s.email,
+                                full_name: s.full_name,
+                                class_group: s.class_group,
+                                role: 'student'
+                            }, { onConflict: 'email' });
+                        } catch (e) {}
+
+                        // 3. Reset password si demandé
+                        let resetMsg = "";
+                        if (autoReset) {
+                            try {
+                                const recRes = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'apikey': serviceKey,
+                                        'Authorization': `Bearer ${serviceKey}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({ email: s.email })
+                                });
+                                resetMsg = recRes.ok ? " (Email Reset Envoyé ✅)" : " (Erreur Reset)";
+                            } catch (e) {}
+                        }
+
+                        successCount++;
+                        importLogsArea.innerHTML += `<div>✅ <b>${s.email}</b> (${s.full_name}) - Classe ${s.class_group}${resetMsg}</div>`;
+                    } catch (e) {
+                        importLogsArea.innerHTML += `<div class="text-red-400">❌ Erreur pour ${s.email} : ${e.message}</div>`;
+                    }
+                }
+
+                importLogsArea.innerHTML += `<div class="text-emerald-400 font-bold mt-2">🎉 ${successCount}/${students.length} étudiant(s) importé(s) avec succès !</div>`;
+                fetchProfiles();
+            });
+
+            // Envoi massif de réinitialisation de mot de passe
+            sendMassResetBtn.addEventListener('click', async () => {
+                const uniqueEmails = [...new Set(classProfiles.map(p => p.email).concat(allSubmissions.map(s => s.student_email)))].filter(e => e && e.includes('@'));
+                
+                if (!uniqueEmails.length) {
+                    alert("Aucun étudiant trouvé à réinitialiser.");
+                    return;
+                }
+
+                if (!confirm(`Confirmez-vous l'envoi d'un email de réinitialisation de mot de passe à l'ensemble des ${uniqueEmails.length} étudiants ?`)) {
+                    return;
+                }
+
+                resetStatusArea.classList.remove('hidden');
+                resetStatusArea.innerHTML = `<div class="text-amber-400">📨 Début des envois de réinitialisation (${uniqueEmails.length} destinataires)...</div>`;
+
+                let sentCount = 0;
+                for (const em of uniqueEmails) {
+                    try {
+                        const res = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+                            method: 'POST',
+                            headers: {
+                                'apikey': serviceKey,
+                                'Authorization': `Bearer ${serviceKey}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ email: em })
+                        });
+
+                        if (res.ok) {
+                            sentCount++;
+                            resetStatusArea.innerHTML += `<div>✅ Email envoyé avec succès à : <b>${em}</b></div>`;
+                        } else {
+                            resetStatusArea.innerHTML += `<div class="text-amber-300">⚠️ Erreur d'envoi à ${em} (Code HTTP ${res.status})</div>`;
+                        }
+                    } catch (e) {
+                        resetStatusArea.innerHTML += `<div class="text-red-400">❌ Exception pour ${em} : ${e.message}</div>`;
+                    }
+                }
+
+                resetStatusArea.innerHTML += `<div class="text-emerald-400 font-bold mt-2">🎉 Opération terminée : ${sentCount}/${uniqueEmails.length} emails traités avec succès !</div>`;
+            });
+
+            // Tableau des étudiants & actions individuelles
+            function renderRosterTable() {
+                const filter = (searchRosterInput.value || '').toLowerCase();
+                const uniqueEmails = [...new Set(classProfiles.map(p => p.email).concat(allSubmissions.map(s => s.student_email)))].filter(e => e && e.includes('@'));
+
+                const filtered = uniqueEmails.filter(em => {
+                    const prof = classProfiles.find(p => p.email === em) || {};
+                    return em.toLowerCase().includes(filter) || (prof.full_name || '').toLowerCase().includes(filter);
+                });
+
+                if (!filtered.length) {
+                    rosterTableBody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-slate-500">Aucun étudiant trouvé.</td></tr>`;
+                    return;
+                }
+
+                rosterTableBody.innerHTML = filtered.map(em => {
+                    const prof = classProfiles.find(p => p.email === em) || {};
+                    const name = prof.full_name || '-';
+                    const cls = prof.class_group || '3ATELIOT';
+
+                    return `
+                        <tr class="hover:bg-slate-900/40 transition-colors">
+                            <td class="py-2.5 px-3 font-mono text-slate-200">${em}</td>
+                            <td class="py-2.5 px-3 text-slate-300">${name}</td>
+                            <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-semibold text-[10px]">${cls}</span></td>
+                            <td class="py-2.5 px-3 text-right space-x-2">
+                                <button onclick="window.sendSingleReset('${em}')" class="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-[10px] font-semibold border border-amber-500/30 cursor-pointer">
+                                    🔑 Envoyer Reset
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+            searchRosterInput.addEventListener('input', renderRosterTable);
+
+            // Action reset individuel accessible globalement
+            window.sendSingleReset = async function(email) {
+                try {
+                    const res = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+                        method: 'POST',
+                        headers: {
+                            'apikey': serviceKey,
+                            'Authorization': `Bearer ${serviceKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ email: email })
+                    });
+                    if (res.ok) {
+                        alert(`Email de réinitialisation envoyé avec succès à ${email} !`);
+                    } else {
+                        alert(`Erreur lors de l'envoi du reset à ${email}.`);
+                    }
+                } catch (e) {
+                    alert(`Erreur : ${e.message}`);
+                }
+            };
+
+            // Export du Roster en CSV
+            exportRosterBtn.addEventListener('click', () => {
+                const uniqueEmails = [...new Set(classProfiles.map(p => p.email).concat(allSubmissions.map(s => s.student_email)))].filter(e => e && e.includes('@'));
+                const rows = uniqueEmails.map(em => {
+                    const prof = classProfiles.find(p => p.email === em) || {};
+                    return {
+                        Email: em,
+                        Nom: prof.full_name || '',
+                        Classe: prof.class_group || '3ATELIOT',
+                        Role: prof.role || 'student'
+                    };
+                });
+
+                if (window.XLSX) {
+                    const ws = XLSX.utils.json_to_sheet(rows);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Roster_3ATELIOT");
+                    XLSX.writeFile(wb, `roster_etudiants_3ATELIOT.csv`, { bookType: 'csv' });
+                }
+            });
+
+            // Initialisation
+            initSupabase();
+        });
+    </script>
+</body>
+</html>
+

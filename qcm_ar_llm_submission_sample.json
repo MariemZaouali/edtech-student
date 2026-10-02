@@ -1,0 +1,21 @@
+{
+  "topic": "QCM : Modèles Autorégressifs (AR LLMs)",
+  "student_email": "meriam.etudiant@univ.fr",
+  "submitted_at": "2026-10-02T10:00:00Z",
+  "time_spent_seconds": 645,
+  "is_timeout": false,
+  "total_questions": 10,
+  "answered_count": 10,
+  "answers": {
+    "Q1": "B",
+    "Q2": "C",
+    "Q3": "C",
+    "Q4": "B",
+    "Q5": "C",
+    "Q6": "D",
+    "Q7": "B",
+    "Q8": "C",
+    "Q9": "B",
+    "Q10": "B"
+  }
+}
