@@ -80,55 +80,6 @@ window.SUPABASE_CONFIG = {
                     templateContent: "id,predicted\n0,3\n1,8\n2,1\n3,0\n4,7\n5,2"
                 },
                 {
-                    id: "genai-lstm-tikz",
-                    title: "LSTM vs RNN (TikZ & Théorie)",
-                    course: "GenAI",
-                    maxAttempts: 3,
-                    acceptedTypes: [".json"],
-                    typeLabel: "Fichier JSON (.json)",
-                    badgeColor: "emerald",
-                    icon: "layers",
-                    shortDescription: "Description des LSTMs et schéma TikZ comparatif (vs RNNs).",
-                    fullDescription: "<div class='text-xs space-y-1.5'>" +
-                        "<div><strong>Consigne officielle :</strong> <span class='px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold'>Submit a description of LSTMs and a Figure in TikZ format to explain the improvement of LSTMs over RNNs</span></div>" +
-                        "<div>Déposez votre fichier <code>.json</code> contenant la description théorique des LSTMs, la justification de la résolution du vanishing gradient par rapport aux RNNs classiques, et votre code de figure au format <strong>TikZ</strong> (LaTeX).</div>" +
-                        "<div class='p-2 rounded-lg bg-slate-900 border border-slate-700 font-mono text-[11px] text-emerald-300'>" +
-                        "Final score = 0.30·T + 0.25·A + 0.20·I + 0.15·P + 0.05·R + 0.05·X" +
-                        "</div>" +
-                        "<div class='text-[10px] text-slate-400'>T: Figure TikZ (Architecture & flux), A: Exactitude technique & Portes, I: Résolution du Vanishing Gradient (Amélioration vs RNN), P: Qualité pédagogique, R: Limites du RNN Vanilla, X: Références académiques</div>" +
-                        "</div>",
-                    criteria: [
-                        { key: "T", name: "Figure TikZ (Schéma & Architecture)", weight: "30%" },
-                        { key: "A", name: "Exactitude Technique & Équations des Portes", weight: "25%" },
-                        { key: "I", name: "Amélioration vs RNN & Vanishing Gradient (CEC)", weight: "20%" },
-                        { key: "P", name: "Qualité Pédagogique & Intuition", weight: "15%" },
-                        { key: "R", name: "Rappel des Limites du RNN Classique", weight: "5%" },
-                        { key: "X", name: "Sources & Références Académiques", weight: "5%" }
-                    ],
-                    templateFilename: "lstm_tikz_submission_template.json",
-                    templateContent: JSON.stringify({
-                        topic: "Submit a description of LSTMs and a Figure in TikZ format to explain the improvement of LSTMs over RNNs",
-                        student_email: "votre.email@etudiant.univ.fr",
-                        description: {
-                            rnn_limitations: "Expliquez les limitations des RNNs classiques : problème d'évanouissement et d'explosion du gradient (vanishing/exploding gradient), multiplication répétée de matrices jacobiennes (W_hh)^T, et perte de mémoire à long terme.",
-                            lstm_architecture: "Décrivez l'architecture générale de la cellule LSTM, la séparation entre Cell State (C_t) et Hidden State (h_t), et le rôle régulateur des différentes portes.",
-                            gates_formulation: {
-                                forget_gate: "f_t = \\sigma(W_f [h_{t-1}, x_t] + b_f) : régule l'oubli sélectif des informations passées du Cell State.",
-                                input_gate: "i_t = \\sigma(W_i [h_{t-1}, x_t] + b_i) et \\tilde{C}_t = \\tanh(W_c [h_{t-1}, x_t] + b_c) : sélectionne les informations entrantes et prépare les candidats.",
-                                cell_state_update: "C_t = f_t \\odot C_{t-1} + i_t \\odot \\tilde{C}_t : autoroute à gradient additive empêchant la disparition exponentielle du gradient.",
-                                output_gate: "o_t = \\sigma(W_o [h_{t-1}, x_t] + b_o) et h_t = o_t \\odot \\tanh(C_t) : filtre l'état de cellule pour produire la sortie masquée."
-                            },
-                            improvement_over_rnn: "Démontrez pourquoi le LSTM surmonte les limites du RNN : Constant Error Carousel (CEC), transport additif du gradient (dC_t / dC_{t-1} = f_t + ... au lieu de produits matriciels successifs), évitant la dégénérescence du gradient sur de longues séquences temporelles."
-                        },
-                        tikz_figure: "\\begin{tikzpicture}[\n  scale=0.85, every node/.style={transform shape},\n  cell/.style={rectangle, draw=black!70, fill=blue!5, very thick, rounded corners=8pt, minimum width=9cm, minimum height=6cm},\n  op/.style={circle, draw=black!80, fill=yellow!20, thick, minimum size=0.6cm, inner sep=0pt},\n  gate/.style={rectangle, draw=black!80, fill=orange!25, thick, rounded corners=3pt, minimum width=0.8cm, minimum height=0.6cm, font=\\small},\n  conn/.style={-stealth, thick, draw=black!75},\n  highway/.style={-stealth, very thick, draw=red!70!black}\n]\n  % Cell container\n  \\node[cell] (lstm) at (4,2.5) {};\n  \\node[above right, font=\\bfseries\\small, text=blue!80!black] at (lstm.north west) {Cellule LSTM};\n\n  % Inputs & States\n  \\node (x) at (1, -1.2) {$x_t$};\n  \\node (h_prev) at (-1.5, 0.5) {$h_{t-1}$};\n  \\node (c_prev) at (-1.5, 4.5) {$C_{t-1}$};\n\n  % Gates\n  \\node[gate] (f_gate) at (1.5, 1.8) {$\\sigma$};\n  \\node[below, font=\\scriptsize] at (f_gate.south) {Forget $f_t$};\n  \\node[gate] (i_gate) at (3.0, 1.8) {$\\sigma$};\n  \\node[below, font=\\scriptsize] at (i_gate.south) {Input $i_t$};\n  \\node[gate] (c_tilde) at (4.5, 1.8) {$\\tanh$};\n  \\node[below, font=\\scriptsize] at (c_tilde.south) {$\\tilde{C}_t$};\n  \\node[gate] (o_gate) at (6.0, 1.8) {$\\sigma$};\n  \\node[below, font=\\scriptsize] at (o_gate.south) {Output $o_t$};\n\n  % Cell State Highway Operations\n  \\node[op] (mult_c) at (1.5, 4.5) {$\\odot$};\n  \\node[op] (add_c) at (3.75, 4.5) {$\\oplus$};\n  \\node (c_next) at (9.5, 4.5) {$C_t$};\n\n  % Hidden State Operations\n  \\node[op] (mult_i_c) at (3.75, 3.2) {$\\odot$};\n  \\node[gate] (tanh_c) at (6.8, 3.5) {$\\tanh$};\n  \\node[op] (mult_h) at (6.8, 0.5) {$\\odot$};\n  \\node (h_next) at (9.5, 0.5) {$h_t$};\n\n  % Gradient Highway\n  \\draw[highway] (c_prev) -- (mult_c);\n  \\draw[highway] (mult_c) -- node[above, font=\\scriptsize, text=red!60!black] {CEC : Autoroute additive du gradient} (add_c);\n  \\draw[highway] (add_c) -- (c_next);\n\n  % Feedforward & Gating\n  \\draw[conn] (x) |- (f_gate);\n  \\draw[conn] (x) |- (i_gate);\n  \\draw[conn] (x) |- (c_tilde);\n  \\draw[conn] (x) |- (o_gate);\n  \\draw[conn] (h_prev) -- (0.5, 0.5) |- (f_gate);\n  \\draw[conn] (0.5, 0.5) |- (i_gate);\n  \\draw[conn] (0.5, 0.5) |- (c_tilde);\n  \\draw[conn] (0.5, 0.5) |- (o_gate);\n\n  \\draw[conn] (f_gate) -- (mult_c);\n  \\draw[conn] (i_gate) |- (mult_i_c);\n  \\draw[conn] (c_tilde) |- (mult_i_c);\n  \\draw[conn] (mult_i_c) -- (add_c);\n\n  \\draw[conn] (add_c.east) -| (tanh_c.north);\n  \\draw[conn] (tanh_c) -- (mult_h);\n  \\draw[conn] (o_gate) |- (mult_h);\n  \\draw[conn] (mult_h) -- (h_next);\n\\end{tikzpicture}",
-                        references: [
-                            "Hochreiter, S., & Schmidhuber, J. (1997). Long short-term memory. Neural computation, 9(8), 1735-1780.",
-                            "Gers, F. A., Schmidhuber, J., & Cummins, F. (2000). Learning to forget: Continual prediction with LSTM.",
-                            "Olah, C. (2015). Understanding LSTM Networks."
-                        ]
-                    }, null, 2)
-                },
-                {
                     id: "genai-qcm-ar-llm",
                     title: "QCM : Modèles Autorégressifs (AR LLMs)",
                     course: "GenAI",
