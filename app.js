@@ -741,7 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!supabase) return;
             try {
                 const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: window.location.origin + window.location.pathname
+                    redirectTo: window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/') + 'reset-password.html'
                 });
                 if (error) throw error;
                 showAlert(authAlert, "📧 Lien de réinitialisation envoyé ! Vérifiez votre boîte mail (et spams).", "success");
