@@ -40,6 +40,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const nameFieldContainer = document.getElementById('nameFieldContainer');
     const authSubmitText = document.getElementById('authSubmitText');
     const authAlert = document.getElementById('authAlert');
+    const forgotPasswordContainer = document.getElementById('forgotPasswordContainer');
+    const forgotPasswordBtn = document.getElementById('forgotPasswordBtn');
     const authProfilePill = document.getElementById('authProfilePill');
     const userEmailText = document.getElementById('userEmailText');
     const userAvatar = document.getElementById('userAvatar');
@@ -654,6 +656,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authFormTitle.textContent = "Connexion Étudiant";
             authSubmitText.textContent = "Se connecter";
             nameFieldContainer.classList.add('hidden');
+            if (forgotPasswordContainer) forgotPasswordContainer.classList.remove('hidden');
             hideAlert(authAlert);
         });
 
@@ -664,6 +667,7 @@ document.addEventListener('DOMContentLoaded', () => {
             authFormTitle.textContent = "Créer un Compte Étudiant";
             authSubmitText.textContent = "S'inscrire";
             nameFieldContainer.classList.remove('hidden');
+            if (forgotPasswordContainer) forgotPasswordContainer.classList.add('hidden');
             hideAlert(authAlert);
         });
     }
@@ -726,10 +730,45 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Forgot password listener
+    if (forgotPasswordBtn) {
+        forgotPasswordBtn.addEventListener('click', async () => {
+            const email = document.getElementById('authEmailInput')?.value.trim();
+            if (!email) {
+                showAlert(authAlert, "⚠️ Veuillez saisir votre email d'abord dans le champ ci-dessus.", "error");
+                return;
+            }
+            if (!supabase) return;
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + window.location.pathname
+                });
+                if (error) throw error;
+                showAlert(authAlert, "📧 Lien de réinitialisation envoyé ! Vérifiez votre boîte mail (et spams).", "success");
+            } catch (err) {
+                showAlert(authAlert, "❌ Erreur : " + err.message, "error");
+            }
+        });
+    }
+
     if (supabase) {
-        supabase.auth.onAuthStateChange((event, session) => {
+        supabase.auth.onAuthStateChange(async (event, session) => {
             currentUser = session?.user || null;
             renderAuthUI(currentUser);
+            if (event === 'PASSWORD_RECOVERY') {
+                const newPassword = prompt("Saisissez votre nouveau mot de passe (min 6 caractères) :");
+                if (newPassword && newPassword.length >= 6) {
+                    const { error } = await supabase.auth.updateUser({ password: newPassword });
+                    if (error) {
+                        alert("Erreur lors de la mise à jour du mot de passe : " + error.message);
+                    } else {
+                        alert("Mot de passe mis à jour avec succès ! Vous pouvez vous reconnecter.");
+                    }
+                } else if (newPassword) {
+                    alert("Le mot de passe doit contenir au moins 6 caractères. Veuillez recommencer la procédure.");
+                }
+            }
+        });
             if (currentUser) {
                 fetchSubmissions();
                 setupRealtimeSubscription();
