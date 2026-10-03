@@ -83,6 +83,7 @@ window.SUPABASE_CONFIG = {
                     id: "genai-qcm-ar-llm",
                     title: "QCM : Modèles Autorégressifs (AR LLMs)",
                     course: "GenAI",
+                    hidden: true,  // Masqué temporairement du dépôt distant
                     isQuiz: true,
                     timePerQuestionSeconds: 120, // 2 min par question
                     totalTimeSeconds: 1200,      // 20 min au total pour 10 questions
@@ -239,5 +240,12 @@ window.SUPABASE_CONFIG = {
     // Rétrocompatibilité : Liste aplatie de tous les devoirs
     get ASSIGNMENTS() {
         return this.COURSES.flatMap(course => course.assignments);
-    }
+    },
+
+    // Noms d'exercices à masquer de l'interface (dropdown ET historique)
+    // Mettre à [] pour tout réafficher
+    HIDDEN_ASSIGNMENT_NAMES: [
+        "QCM : Modèles Autorégressifs (AR LLMs)",
+        "LSTM vs RNN (TikZ & Théorie)"
+    ]
 };

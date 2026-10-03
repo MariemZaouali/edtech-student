@@ -143,16 +143,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!assignmentSelect) return;
         const selectedCourseId = courseSelect ? courseSelect.value : "genai";
         const course = config.COURSES.find(c => c.id === selectedCourseId) || config.COURSES[0];
+        const hidden = config.HIDDEN_ASSIGNMENT_NAMES || [];
 
         assignmentSelect.innerHTML = '';
         if (course && course.assignments) {
-            course.assignments.forEach((item, index) => {
-                const opt = document.createElement('option');
-                opt.value = item.title;
-                opt.textContent = `${item.title} (${item.typeLabel})`;
-                if (index === 0) opt.selected = true;
-                assignmentSelect.appendChild(opt);
-            });
+            let firstIndex = 0;
+            course.assignments
+                .filter(item => !item.hidden && !hidden.includes(item.title))
+                .forEach((item, index) => {
+                    const opt = document.createElement('option');
+                    opt.value = item.title;
+                    opt.textContent = `${item.title} (${item.typeLabel})`;
+                    if (index === 0) opt.selected = true;
+                    assignmentSelect.appendChild(opt);
+                });
         }
         updateExerciseCard();
     }
@@ -1059,9 +1063,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function enrichAndRenderSubmissions(subs) {
+        // Filtrer les soumissions des exercices masques
+        const hiddenNames = config.HIDDEN_ASSIGNMENT_NAMES || [];
+        const visible = subs.filter(s => !hiddenNames.includes(s.assignment_name));
+
         // Regrouper par assignment_name pour identifier la meilleure note
         const groups = {};
-        subs.forEach(s => {
+        visible.forEach(s => {
             if (!groups[s.assignment_name]) groups[s.assignment_name] = [];
             groups[s.assignment_name].push(s);
         });
@@ -1081,7 +1089,7 @@ document.addEventListener('DOMContentLoaded', () => {
             s.isBest = (maxG !== undefined && s.grade !== null && parseFloat(s.grade) === maxG);
         });
 
-        renderSubmissionsTable(subs);
+        renderSubmissionsTable(visible);
     }
 
     function renderSubmissionsTable(submissions) {
