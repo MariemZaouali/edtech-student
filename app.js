@@ -768,7 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert("Le mot de passe doit contenir au moins 6 caractères. Veuillez recommencer la procédure.");
                 }
             }
-        });
+            
             if (currentUser) {
                 fetchSubmissions();
                 setupRealtimeSubscription();
