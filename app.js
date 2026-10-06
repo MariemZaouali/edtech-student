@@ -55,6 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const exerciseTypeBadge = document.getElementById('exerciseTypeBadge');
     const attemptsCounter = document.getElementById('attemptsCounter');
     const exerciseBestGrade = document.getElementById('exerciseBestGrade');
+    const bestGradeContainer = document.getElementById('bestGradeContainer');
+    const cnnRankContainer = document.getElementById('cnnRankContainer');
+    const cnnCurrentRank = document.getElementById('cnnCurrentRank');
+    const cnnLeaderboardPanel = document.getElementById('cnnLeaderboardPanel');
+    const leaderboardTableBody = document.getElementById('leaderboardTableBody');
+    const refreshLeaderboardBtn = document.getElementById('refreshLeaderboardBtn');
     const exerciseDescription = document.getElementById('exerciseDescription');
     const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
 
@@ -110,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let myOverrides = [];
     let realtimeSubscription = null;
     let currentHistoryFilter = 'all';
+    let cnnLeaderboardData = [];
 
     // État du QCM Interactif
     let qcmAnswers = {};
@@ -187,6 +194,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (dropzoneAllowedText) {
             dropzoneAllowedText.textContent = `Formats acceptés : ${assignment.acceptedTypes ? assignment.acceptedTypes.join(', ') : '.json, .csv'} • Max 50 Mo`;
+        }
+
+        // Gérer l'affichage spécifique pour CNN Challenger
+        if (assignment.title === "CNN Challenger") {
+            if (bestGradeContainer) bestGradeContainer.classList.add('hidden');
+            if (cnnRankContainer) cnnRankContainer.classList.remove('hidden');
+            if (cnnLeaderboardPanel) cnnLeaderboardPanel.classList.remove('hidden');
+            fetchCnnLeaderboard();
+        } else {
+            if (bestGradeContainer) bestGradeContainer.classList.remove('hidden');
+            if (cnnRankContainer) cnnRankContainer.classList.add('hidden');
+            if (cnnLeaderboardPanel) cnnLeaderboardPanel.classList.add('hidden');
         }
 
         // Basculer affichage QCM Interactif vs Dépôt classique
@@ -1154,10 +1173,15 @@ document.addEventListener('DOMContentLoaded', () => {
                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> En cours
                    </span>`;
 
-            // Note badge
-            const gradeBadge = isGraded
-                ? `<span class="text-sm font-bold font-display px-2.5 py-1 rounded-lg ${sub.isBest ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">${gradeDisplay}</span>`
-                : `<span class="text-xs font-medium text-slate-500 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">${gradeDisplay}</span>`;
+            // Note badge (Masquée pour CNN Challenger)
+            let gradeBadge = '';
+            if (sub.assignment_name === 'CNN Challenger') {
+                gradeBadge = `<span class="text-xs font-medium text-purple-400 px-2 py-1 rounded-lg bg-purple-900/30 border border-purple-800 flex items-center justify-center gap-1"><i data-lucide="trophy" class="w-3 h-3"></i> Leaderboard</span>`;
+            } else {
+                gradeBadge = isGraded
+                    ? `<span class="text-sm font-bold font-display px-2.5 py-1 rounded-lg ${sub.isBest ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">${gradeDisplay}</span>`
+                    : `<span class="text-xs font-medium text-slate-500 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">${gradeDisplay}</span>`;
+            }
 
             // Rapport / Feedback professeur
             const feedbackHtml = sub.feedback
@@ -1214,9 +1238,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!statSubmittedCount || !statAverageGrade) return;
         statSubmittedCount.textContent = submissions.length;
 
-        // Moyenne des MEILLEURES notes par exercice
+        // Moyenne des MEILLEURES notes par exercice (hors CNN Challenger)
         const groups = {};
         submissions.forEach(s => {
+            if (s.assignment_name === "CNN Challenger") return; // Ignorer pour la moyenne
             if (!groups[s.assignment_name]) groups[s.assignment_name] = [];
             if (s.grade !== null && s.grade !== undefined) {
                 groups[s.assignment_name].push(parseFloat(s.grade));
@@ -1287,6 +1312,106 @@ document.addEventListener('DOMContentLoaded', () => {
             supabase.removeChannel(realtimeSubscription);
             realtimeSubscription = null;
         }
+    }
+
+    // 10.5 LEADERBOARD CNN
+    async function fetchCnnLeaderboard() {
+        if (!supabase) return;
+        try {
+            const { data, error } = await supabase
+                .from('submissions')
+                .select('student_id, student_email, grade')
+                .eq('assignment_name', 'CNN Challenger')
+                .not('grade', 'is', null)
+                .order('grade', { ascending: false });
+            
+            if (error) throw error;
+
+            const groups = {};
+            data.forEach(sub => {
+                if (!groups[sub.student_id]) {
+                    groups[sub.student_id] = {
+                        student_email: sub.student_email,
+                        best_grade: parseFloat(sub.grade),
+                        attempts: 1
+                    };
+                } else {
+                    groups[sub.student_id].attempts++;
+                    if (parseFloat(sub.grade) > groups[sub.student_id].best_grade) {
+                        groups[sub.student_id].best_grade = parseFloat(sub.grade);
+                    }
+                }
+            });
+
+            cnnLeaderboardData = Object.values(groups).sort((a, b) => b.best_grade - a.best_grade);
+            
+            renderLeaderboard();
+            updateCnnRankBadge();
+
+        } catch (err) {
+            console.error("Erreur chargement leaderboard CNN:", err);
+        }
+    }
+
+    function renderLeaderboard() {
+        if (!leaderboardTableBody) return;
+        
+        if (cnnLeaderboardData.length === 0) {
+            leaderboardTableBody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="py-8 text-center text-slate-500">
+                        <i data-lucide="trophy" class="w-6 h-6 mx-auto mb-2 text-slate-600"></i>
+                        Aucune soumission évaluée pour le moment.
+                    </td>
+                </tr>
+            `;
+            if (window.lucide) lucide.createIcons();
+            return;
+        }
+
+        leaderboardTableBody.innerHTML = cnnLeaderboardData.map((user, index) => {
+            const rank = index + 1;
+            const isCurrentUser = currentUser && user.student_email === currentUser.email;
+            
+            let rankBadge = `<span class="font-bold text-slate-400">${rank}</span>`;
+            if (rank === 1) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-gold text-xs font-black shadow-lg">1</span>`;
+            else if (rank === 2) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-silver text-xs font-black shadow-lg">2</span>`;
+            else if (rank === 3) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-bronze text-xs font-black shadow-lg">3</span>`;
+
+            let displayName = user.student_email.split('@')[0];
+            if (isCurrentUser) displayName += " (Vous)";
+
+            return `
+                <tr class="leaderboard-row ${isCurrentUser ? 'leaderboard-current-user' : ''} border-b border-slate-800/40">
+                    <td class="py-3 px-2">${rankBadge}</td>
+                    <td class="py-3 px-2 font-medium ${isCurrentUser ? 'text-purple-300' : 'text-slate-300'}">${escapeHtml(displayName)}</td>
+                    <td class="py-3 px-2 text-right text-slate-400">${user.attempts}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function updateCnnRankBadge() {
+        if (!cnnCurrentRank || !currentUser) return;
+        
+        const myIndex = cnnLeaderboardData.findIndex(u => u.student_email === currentUser.email);
+        if (myIndex !== -1) {
+            const rank = myIndex + 1;
+            let rankText = `${rank}<sup>e</sup>`;
+            if (rank === 1) rankText = `1<sup>er</sup> 🏆`;
+            cnnCurrentRank.innerHTML = rankText;
+        } else {
+            cnnCurrentRank.innerHTML = "--";
+        }
+    }
+
+    if (refreshLeaderboardBtn) {
+        refreshLeaderboardBtn.addEventListener('click', () => {
+            fetchCnnLeaderboard();
+            showToast("Classement actualisé.", "info");
+        });
     }
 
     // 11. UTILITAIRES

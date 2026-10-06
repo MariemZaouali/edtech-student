@@ -70,6 +70,41 @@
             border: 1px solid rgba(234, 179, 8, 0.5);
             color: #fde047;
         }
+
+        /* Leaderboard Styles */
+        .leaderboard-row {
+            transition: all 0.3s ease;
+        }
+        .leaderboard-row:hover {
+            transform: translateX(4px);
+            background-color: rgba(99, 102, 241, 0.08);
+        }
+        .leaderboard-rank-gold {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #451a03;
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+        }
+        .leaderboard-rank-silver {
+            background: linear-gradient(135deg, #d1d5db, #9ca3af);
+            color: #1f2937;
+            box-shadow: 0 0 10px rgba(209, 213, 219, 0.3);
+        }
+        .leaderboard-rank-bronze {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            color: #fffbeb;
+            box-shadow: 0 0 10px rgba(217, 119, 6, 0.3);
+        }
+        .leaderboard-current-user {
+            background: rgba(99, 102, 241, 0.12) !important;
+            border-left: 3px solid #818cf8 !important;
+        }
+        @keyframes slideInFromRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .leaderboard-animate {
+            animation: slideInFromRight 0.4s ease forwards;
+        }
     </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-brand-500 selection:text-white flex flex-col relative overflow-x-hidden">
@@ -279,14 +314,25 @@
                                 </div>
                             </div>
 
-                            <!-- Encadré Meilleure Note de cet exercice -->
-                            <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <!-- Encadré Meilleure Note (masqué pour CNN) -->
+                            <div id="bestGradeContainer" class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/70 border border-slate-800">
                                 <span class="text-xs text-slate-400 flex items-center gap-1.5">
                                     <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
                                     Meilleure note retenue :
                                 </span>
                                 <span id="exerciseBestGrade" class="text-sm font-bold font-display text-emerald-400">
                                     -- / 20
+                                </span>
+                            </div>
+
+                            <!-- Encadré Classement CNN (visible seulement pour CNN Challenger) -->
+                            <div id="cnnRankContainer" class="hidden flex items-center justify-between p-2.5 rounded-lg bg-purple-950/40 border border-purple-800/50">
+                                <span class="text-xs text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="trophy" class="w-4 h-4 text-purple-400"></i>
+                                    Votre classement :
+                                </span>
+                                <span id="cnnCurrentRank" class="text-sm font-bold font-display text-purple-300">
+                                    -- 
                                 </span>
                             </div>
 
@@ -443,6 +489,41 @@
                             </button>
                         </form>
 
+                    </div>
+
+                    <!-- LEADERBOARD CNN CHALLENGER (visible uniquement quand CNN sélectionné) -->
+                    <div id="cnnLeaderboardPanel" class="hidden glass-panel rounded-2xl p-6 border border-purple-800/40 shadow-xl space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                <i data-lucide="trophy" class="w-5 h-5 text-purple-400"></i>
+                                Leaderboard CNN Challenger
+                            </h3>
+                            <button id="refreshLeaderboardBtn" title="Actualiser le classement" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-purple-700 transition-colors">
+                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-slate-400">
+                            Classement basé sur la <strong>meilleure précision</strong> de chaque participant. Votre position est mise en évidence.
+                        </p>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="border-b border-purple-800/40 text-slate-400 font-semibold uppercase tracking-wider">
+                                        <th class="pb-3 px-2 w-12">#</th>
+                                        <th class="pb-3 px-2">Participant</th>
+                                        <th class="pb-3 px-2 text-right">Tentatives</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leaderboardTableBody" class="divide-y divide-slate-800/40 font-medium">
+                                    <tr>
+                                        <td colspan="3" class="py-8 text-center text-slate-500">
+                                            <i data-lucide="loader" class="w-6 h-6 mx-auto mb-2 text-slate-600 animate-spin"></i>
+                                            Chargement du classement...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
 
