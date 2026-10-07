@@ -836,8 +836,13 @@ document.addEventListener('DOMContentLoaded', () => {
         dropzone.addEventListener('click', (e) => {
             const assignment = getCurrentAssignment();
             const relatedSubs = mySubmissions.filter(s => s.assignment_name === assignment?.title);
-            if (relatedSubs.length >= (assignment?.maxAttempts || 3)) {
-                showToast("Limite de 3 tentatives atteinte pour cet exercice !", "warning");
+            
+            const ovr = myOverrides.find(o => o.assignment_name === assignment?.title);
+            const bonusAttempts = ovr ? parseInt(ovr.bonus_attempts, 10) : 0;
+            const maxAttempts = (assignment?.maxAttempts || 3) + bonusAttempts;
+
+            if (relatedSubs.length >= maxAttempts) {
+                showToast(`Limite de ${maxAttempts} tentatives atteinte pour cet exercice !`, "warning");
                 return;
             }
             if (e.target !== removeFileBtn && !removeFileBtn.contains(e.target)) {
@@ -886,8 +891,13 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAlert(uploadAlert);
         const assignment = getCurrentAssignment();
         const relatedSubs = mySubmissions.filter(s => s.assignment_name === assignment?.title);
-        if (relatedSubs.length >= (assignment?.maxAttempts || 3)) {
-            showAlert(uploadAlert, "Vous avez déjà soumis vos 3 tentatives pour cet exercice !", "warning");
+        
+        const ovr = myOverrides.find(o => o.assignment_name === assignment?.title);
+        const bonusAttempts = ovr ? parseInt(ovr.bonus_attempts, 10) : 0;
+        const maxAttempts = (assignment?.maxAttempts || 3) + bonusAttempts;
+
+        if (relatedSubs.length >= maxAttempts) {
+            showAlert(uploadAlert, `Vous avez déjà soumis vos ${maxAttempts} tentatives pour cet exercice !`, "warning");
             resetFileSelection();
             return;
         }
@@ -959,8 +969,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const assignment = getCurrentAssignment();
             const relatedSubs = mySubmissions.filter(s => s.assignment_name === assignment.title);
-            if (relatedSubs.length >= (assignment.maxAttempts || 3)) {
-                showAlert(uploadAlert, "Nombre maximal de 3 tentatives atteint !", "error");
+            
+            const ovr = myOverrides.find(o => o.assignment_name === assignment.title);
+            const bonusAttempts = ovr ? parseInt(ovr.bonus_attempts, 10) : 0;
+            const maxAttempts = (assignment.maxAttempts || 3) + bonusAttempts;
+
+            if (relatedSubs.length >= maxAttempts) {
+                showAlert(uploadAlert, `Nombre maximal de ${maxAttempts} tentatives atteint !`, "error");
                 return;
             }
 
@@ -981,7 +996,7 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadProgressContainer.classList.remove('hidden');
             uploadProgressBar.style.width = '30%';
             uploadProgressPercent.textContent = '30%';
-            uploadProgressLabel.textContent = `Téléversement tentative ${attemptNumber}/3 dans Supabase Storage...`;
+            uploadProgressLabel.textContent = `Téléversement tentative ${attemptNumber}/${maxAttempts} dans Supabase Storage...`;
 
             try {
                 const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -1318,11 +1333,38 @@ document.addEventListener('DOMContentLoaded', () => {
     async function fetchCnnLeaderboard() {
         if (!supabase) return;
         try {
+            // First check if it's published by the teacher
+            const { data: publishData } = await supabase
+                .from('submissions')
+                .select('id')
+                .eq('assignment_name', 'CNN Challenger')
+                .eq('student_email', 'SYSTEM_LEADERBOARD_PUBLISHED')
+                .limit(1);
+
+            const isPublished = publishData && publishData.length > 0;
+
+            if (!isPublished) {
+                if (leaderboardTableBody) {
+                    leaderboardTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="3" class="py-8 text-center text-slate-500">
+                                <i data-lucide="lock" class="w-6 h-6 mx-auto mb-2 text-slate-600"></i>
+                                Le classement n'est pas encore publié par l'enseignant.
+                            </td>
+                        </tr>
+                    `;
+                    if (window.lucide) lucide.createIcons();
+                }
+                if (cnnCurrentRank) cnnCurrentRank.innerHTML = "--";
+                return;
+            }
+
             const { data, error } = await supabase
                 .from('submissions')
                 .select('student_id, student_email, grade')
                 .eq('assignment_name', 'CNN Challenger')
                 .not('grade', 'is', null)
+                .neq('student_email', 'SYSTEM_LEADERBOARD_PUBLISHED')
                 .order('grade', { ascending: false });
             
             if (error) throw error;
