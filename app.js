@@ -63,6 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const refreshLeaderboardBtn = document.getElementById('refreshLeaderboardBtn');
     const exerciseDescription = document.getElementById('exerciseDescription');
     const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+    const cnnLatexPanel = document.getElementById('cnnLatexPanel');
+    const deadlineBanner = document.getElementById('deadlineBanner');
+    const deadlineBannerText = document.getElementById('deadlineBannerText');
 
     // Drag & Drop & Upload
     const dropzone = document.getElementById('dropzone');
@@ -201,12 +204,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (bestGradeContainer) bestGradeContainer.classList.add('hidden');
             if (cnnRankContainer) cnnRankContainer.classList.remove('hidden');
             if (cnnLeaderboardPanel) cnnLeaderboardPanel.classList.remove('hidden');
+            if (cnnLatexPanel) cnnLatexPanel.classList.remove('hidden');
             fetchCnnLeaderboard();
+            fetchLatexReport();
         } else {
             if (bestGradeContainer) bestGradeContainer.classList.remove('hidden');
             if (cnnRankContainer) cnnRankContainer.classList.add('hidden');
             if (cnnLeaderboardPanel) cnnLeaderboardPanel.classList.add('hidden');
+            if (cnnLatexPanel) cnnLatexPanel.classList.add('hidden');
         }
+
+        // Affichage de la deadline si définie
+        renderDeadlineBanner(assignment);
 
         // Basculer affichage QCM Interactif vs Dépôt classique
         if (assignment.isQuiz) {
@@ -1086,6 +1095,35 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (ovrErr) {
                 myOverrides = [];
             }
+
+            // 3. Charger les deadlines (Supabase en priorité, sinon localStorage)
+            try {
+                const { data: dlData } = await supabase
+                    .from('assignment_deadlines')
+                    .select('assignment_title, deadline');
+                if (dlData && dlData.length > 0) {
+                    dlData.forEach(row => {
+                        const a = config.ASSIGNMENTS?.find(x => x.title === row.assignment_title);
+                        if (a) a.deadline = row.deadline || null;
+                    });
+                } else {
+                    // Fallback localStorage (deadlines sauvegardées par l'enseignant en local)
+                    try {
+                        const localDl = JSON.parse(localStorage.getItem('EDTECH_DEADLINES') || '{}');
+                        config.ASSIGNMENTS?.forEach(a => {
+                            if (localDl[a.title]) a.deadline = localDl[a.title];
+                        });
+                    } catch(e) {}
+                }
+            } catch(dlErr) {
+                // Fallback localStorage si table n'existe pas encore
+                try {
+                    const localDl = JSON.parse(localStorage.getItem('EDTECH_DEADLINES') || '{}');
+                    config.ASSIGNMENTS?.forEach(a => {
+                        if (localDl[a.title]) a.deadline = localDl[a.title];
+                    });
+                } catch(e) {}
+            }
             
             enrichAndRenderSubmissions(mySubmissions);
             updateAttemptsAndBestScore();
@@ -1453,6 +1491,243 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshLeaderboardBtn.addEventListener('click', () => {
             fetchCnnLeaderboard();
             showToast("Classement actualisé.", "info");
+        });
+    }
+
+    // =========================================================================
+    // 10b. DEADLINE BANNER
+    // =========================================================================
+    function renderDeadlineBanner(assignment) {
+        if (!deadlineBanner || !deadlineBannerText) return;
+        const deadlineIso = assignment?.deadline;
+        if (!deadlineIso) {
+            deadlineBanner.classList.add('hidden');
+            return;
+        }
+        const now = new Date();
+        const dl = new Date(deadlineIso);
+        const diffMs = dl - now;
+        deadlineBanner.classList.remove('hidden');
+        if (diffMs <= 0) {
+            deadlineBanner.classList.remove('ok', 'deadline-urgent');
+            deadlineBannerText.className = 'text-xs font-semibold text-red-300';
+            deadlineBannerText.textContent = `⛔ Deadline expirée le ${dl.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+        } else {
+            const days = Math.floor(diffMs / 86400000);
+            const hours = Math.floor((diffMs % 86400000) / 3600000);
+            const mins = Math.floor((diffMs % 3600000) / 60000);
+            const isUrgent = diffMs < 86400000; // moins de 24h
+            if (isUrgent) {
+                deadlineBanner.classList.remove('ok');
+                deadlineBanner.classList.add('deadline-urgent');
+                deadlineBannerText.className = 'text-xs font-semibold text-red-300';
+                deadlineBannerText.textContent = `⚠️ Deadline dans ${hours}h ${mins}min — ${dl.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`;
+            } else {
+                deadlineBanner.classList.add('ok');
+                deadlineBanner.classList.remove('deadline-urgent');
+                deadlineBannerText.className = 'text-xs font-semibold text-emerald-300';
+                deadlineBannerText.textContent = `🗓️ Deadline : ${dl.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })} (dans ${days}j ${hours}h)`;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 10c. RAPPORT LATEX CNN CHALLENGER
+    // =========================================================================
+    let latexSelectedFile = null;
+    let latexCurrentRecord = null;
+
+    const latexDropzone        = document.getElementById('latexDropzone');
+    const latexFileInput       = document.getElementById('latexFileInput');
+    const latexDropzoneEmpty   = document.getElementById('latexDropzoneEmpty');
+    const latexDropzonePreview = document.getElementById('latexDropzonePreview');
+    const latexPreviewFileName = document.getElementById('latexPreviewFileName');
+    const latexPreviewFileSize = document.getElementById('latexPreviewFileSize');
+    const latexRemoveFileBtn   = document.getElementById('latexRemoveFileBtn');
+    const latexSubmitBtn       = document.getElementById('latexSubmitBtn');
+    const latexSubmitText      = document.getElementById('latexSubmitText');
+    const latexProgressContainer = document.getElementById('latexProgressContainer');
+    const latexProgressBar     = document.getElementById('latexProgressBar');
+    const latexProgressPercent = document.getElementById('latexProgressPercent');
+    const latexProgressLabel   = document.getElementById('latexProgressLabel');
+    const latexAlert           = document.getElementById('latexAlert');
+    const latexExistingReport  = document.getElementById('latexExistingReport');
+    const latexExistingLink    = document.getElementById('latexExistingLink');
+    const latexExistingName    = document.getElementById('latexExistingName');
+    const latexDeleteExistingBtn = document.getElementById('latexDeleteExistingBtn');
+
+    async function fetchLatexReport() {
+        if (!supabase || !currentUser) return;
+        try {
+            const { data, error } = await supabase
+                .from('cnn_latex_reports')
+                .select('*')
+                .eq('student_id', currentUser.id)
+                .maybeSingle();
+            if (error) { console.warn('cnn_latex_reports:', error.message); latexCurrentRecord = null; }
+            else latexCurrentRecord = data || null;
+        } catch (e) {
+            console.warn('fetchLatexReport:', e);
+            latexCurrentRecord = null;
+        }
+        renderLatexReportUI();
+    }
+
+    function renderLatexReportUI() {
+        if (!latexExistingReport) return;
+        if (latexCurrentRecord && latexCurrentRecord.file_url) {
+            latexExistingReport.classList.remove('hidden');
+            if (latexExistingName) latexExistingName.textContent = latexCurrentRecord.file_name || 'rapport';
+            if (latexExistingLink) latexExistingLink.href = latexCurrentRecord.file_url;
+            if (latexSubmitText) latexSubmitText.textContent = 'Remplacer le rapport';
+        } else {
+            latexExistingReport.classList.add('hidden');
+            if (latexSubmitText) latexSubmitText.textContent = 'Déposer le rapport';
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function resetLatexFileSelection() {
+        latexSelectedFile = null;
+        if (latexFileInput) latexFileInput.value = '';
+        if (latexDropzoneEmpty) latexDropzoneEmpty.classList.remove('hidden');
+        if (latexDropzonePreview) latexDropzonePreview.classList.add('hidden');
+        if (latexSubmitBtn) latexSubmitBtn.disabled = true;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function handleLatexFileSelection(file) {
+        hideAlert(latexAlert);
+        const allowed = ['.pdf', '.tex', '.zip'];
+        const name = file.name.toLowerCase();
+        if (!allowed.some(ext => name.endsWith(ext))) {
+            showAlert(latexAlert, 'Format non valide. Utilisez .pdf, .tex ou .zip.', 'error');
+            return;
+        }
+        if (file.size > 50 * 1024 * 1024) {
+            showAlert(latexAlert, 'Fichier trop volumineux (max 50 Mo).', 'error');
+            return;
+        }
+        latexSelectedFile = file;
+        if (latexPreviewFileName) latexPreviewFileName.textContent = file.name;
+        if (latexPreviewFileSize) latexPreviewFileSize.textContent = formatBytes(file.size);
+        if (latexDropzoneEmpty) latexDropzoneEmpty.classList.add('hidden');
+        if (latexDropzonePreview) latexDropzonePreview.classList.remove('hidden');
+        if (latexSubmitBtn) latexSubmitBtn.disabled = false;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    if (latexDropzone && latexFileInput) {
+        latexDropzone.addEventListener('click', (e) => {
+            if (e.target !== latexRemoveFileBtn && !latexRemoveFileBtn?.contains(e.target)) {
+                latexFileInput.click();
+            }
+        });
+        ['dragenter', 'dragover'].forEach(ev => latexDropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            latexDropzone.classList.add('dropzone-active');
+        }));
+        ['dragleave', 'drop'].forEach(ev => latexDropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            latexDropzone.classList.remove('dropzone-active');
+        }));
+        latexDropzone.addEventListener('drop', (e) => {
+            const f = e.dataTransfer?.files?.[0];
+            if (f) handleLatexFileSelection(f);
+        });
+        latexFileInput.addEventListener('change', (e) => {
+            const f = e.target.files?.[0];
+            if (f) handleLatexFileSelection(f);
+        });
+    }
+
+    if (latexRemoveFileBtn) {
+        latexRemoveFileBtn.addEventListener('click', (e) => { e.stopPropagation(); resetLatexFileSelection(); });
+    }
+
+    if (latexSubmitBtn) {
+        latexSubmitBtn.addEventListener('click', async () => {
+            if (!latexSelectedFile || !currentUser) return;
+            hideAlert(latexAlert);
+            latexSubmitBtn.disabled = true;
+            if (latexProgressContainer) latexProgressContainer.classList.remove('hidden');
+            if (latexProgressBar) latexProgressBar.style.width = '20%';
+            if (latexProgressPercent) latexProgressPercent.textContent = '20%';
+            if (latexProgressLabel) latexProgressLabel.textContent = 'Téléversement du rapport...';
+
+            try {
+                // Supprimer l'ancien si existant
+                if (latexCurrentRecord?.file_path) {
+                    await supabase.storage.from('cnn_reports').remove([latexCurrentRecord.file_path]).catch(() => {});
+                    await supabase.from('cnn_latex_reports').delete().eq('student_id', currentUser.id).catch(() => {});
+                }
+
+                const sanitized = latexSelectedFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const filePath = `${currentUser.id}/${Date.now()}_${sanitized}`;
+
+                if (latexProgressBar) latexProgressBar.style.width = '40%';
+                if (latexProgressPercent) latexProgressPercent.textContent = '40%';
+
+                const { error: upErr } = await supabase.storage
+                    .from('cnn_reports')
+                    .upload(filePath, latexSelectedFile, { cacheControl: '3600', upsert: true });
+                if (upErr) throw upErr;
+
+                if (latexProgressBar) latexProgressBar.style.width = '75%';
+                if (latexProgressPercent) latexProgressPercent.textContent = '75%';
+                if (latexProgressLabel) latexProgressLabel.textContent = 'Enregistrement...';
+
+                const { data: { publicUrl } } = supabase.storage.from('cnn_reports').getPublicUrl(filePath);
+
+                const { error: dbErr } = await supabase.from('cnn_latex_reports').upsert({
+                    student_id: currentUser.id,
+                    student_email: currentUser.email,
+                    file_name: latexSelectedFile.name,
+                    file_path: filePath,
+                    file_url: publicUrl,
+                    updated_at: new Date().toISOString()
+                }, { onConflict: 'student_id' });
+                if (dbErr) throw dbErr;
+
+                if (latexProgressBar) latexProgressBar.style.width = '100%';
+                if (latexProgressPercent) latexProgressPercent.textContent = '100%';
+                if (latexProgressLabel) latexProgressLabel.textContent = 'Rapport déposé !';
+
+                showAlert(latexAlert, '✅ Rapport LaTeX déposé avec succès !', 'success');
+                showToast('Rapport CNN déposé !', 'success');
+                resetLatexFileSelection();
+                await fetchLatexReport();
+            } catch (err) {
+                console.error('Erreur rapport LaTeX:', err);
+                showAlert(latexAlert, `Erreur : ${err.message}`, 'error');
+            } finally {
+                latexSubmitBtn.disabled = false;
+                setTimeout(() => {
+                    if (latexProgressContainer) latexProgressContainer.classList.add('hidden');
+                    if (latexProgressBar) latexProgressBar.style.width = '0%';
+                }, 2000);
+            }
+        });
+    }
+
+    if (latexDeleteExistingBtn) {
+        latexDeleteExistingBtn.addEventListener('click', async () => {
+            if (!latexCurrentRecord || !currentUser) return;
+            if (!confirm('Voulez-vous supprimer votre rapport LaTeX ? Vous pourrez en déposer un nouveau.')) return;
+            hideAlert(latexAlert);
+            try {
+                if (latexCurrentRecord.file_path) {
+                    await supabase.storage.from('cnn_reports').remove([latexCurrentRecord.file_path]).catch(() => {});
+                }
+                const { error } = await supabase.from('cnn_latex_reports').delete().eq('student_id', currentUser.id);
+                if (error) throw error;
+                latexCurrentRecord = null;
+                showAlert(latexAlert, 'Rapport supprimé. Vous pouvez en déposer un nouveau.', 'info');
+                showToast('Rapport supprimé.', 'info');
+                renderLatexReportUI();
+            } catch (err) {
+                showAlert(latexAlert, `Erreur suppression : ${err.message}`, 'error');
+            }
         });
     }
 
