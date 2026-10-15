@@ -530,18 +530,18 @@
                             </h3>
                             <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/50">1 fichier max</span>
                         </div>
-                        <p class="text-xs text-slate-400">Déposez votre rapport LaTeX compilé <code class="bg-slate-800 px-1 rounded text-purple-300">.pdf</code> pour le challenge CNN. Vous pouvez le remplacer à tout moment jusqu'à la deadline.</p>
+                        <p class="text-xs text-slate-400">Déposez votre rapport LaTeX source <code class="bg-slate-800 px-1 rounded text-purple-300">.tex</code> ou archive <code class="bg-slate-800 px-1 rounded text-purple-300">.zip</code> pour le challenge CNN. Formats acceptés : <strong class="text-purple-300">.tex, .zip</strong>. Vous pouvez le remplacer à tout moment jusqu'à la deadline.</p>
 
                         <!-- Zone de dépôt LaTeX -->
                         <div id="latexDropzone" class="latex-dropzone rounded-2xl p-5 text-center cursor-pointer bg-slate-900/40 relative group">
-                            <input type="file" id="latexFileInput" class="hidden" accept=".pdf,.tex,.zip">
+                            <input type="file" id="latexFileInput" class="hidden" accept=".tex,.zip">
 
                             <div id="latexDropzoneEmpty" class="space-y-2">
                                 <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
                                     <i data-lucide="file-text" class="w-5 h-5"></i>
                                 </div>
                                 <div class="text-sm font-medium text-slate-200">Glissez votre rapport ou <span class="text-purple-400 underline">parcourez</span></div>
-                                <div class="text-[11px] text-slate-400">Formats : .pdf, .tex, .zip • Max 50 Mo</div>
+                                <div class="text-[11px] text-slate-400">Formats acceptés : <strong class="text-purple-300">.tex, .zip</strong> • Max 50 Mo</div>
                             </div>
 
                             <div id="latexDropzonePreview" class="hidden items-center justify-between bg-slate-900 border border-purple-500/40 rounded-xl p-3 text-left">
@@ -603,40 +603,127 @@
                         </button>
                     </div>
 
-                    <!-- LEADERBOARD CNN CHALLENGER (visible uniquement quand CNN sélectionné) -->
-                    <div id="cnnLeaderboardPanel" class="hidden glass-panel rounded-2xl p-6 border border-purple-800/40 shadow-xl space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
-                                <i data-lucide="trophy" class="w-5 h-5 text-purple-400"></i>
-                                Leaderboard CNN Challenger
-                            </h3>
-                            <button id="refreshLeaderboardBtn" title="Actualiser le classement" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-purple-700 transition-colors">
-                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                    <!-- PANEL: CHALLENGE YOUR MATE (visible quand l'exercice Challenge Your Mate est sélectionné) -->
+                    <div id="challengeMatePanel" class="hidden glass-panel rounded-2xl p-6 border border-rose-800/40 shadow-xl space-y-5">
+                        
+                        <!-- En-tête / Badge d'état de la Session Enseignant -->
+                        <div class="p-4 rounded-xl bg-rose-950/30 border border-rose-800/40 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+                                    <i data-lucide="swords" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold text-white uppercase tracking-wider">Session Enseignant</div>
+                                    <div id="challengeSessionStateLabel" class="text-xs text-rose-300 font-medium">En attente du lancement...</div>
+                                </div>
+                            </div>
+                            <div id="challengeSessionIndicator" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-slate-500"></span> Inactif
+                            </div>
+                        </div>
+
+                        <!-- 1. DÉPÔT DES QUESTIONS & RÉPONSES DE L'ÉTUDIANT -->
+                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                                    <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 text-[11px] flex items-center justify-center font-bold">1</span>
+                                    Vos Questions & Réponses (JSON)
+                                </h4>
+                                <button type="button" id="challengeDownloadTemplateBtn" class="text-[11px] text-rose-400 hover:text-rose-300 underline flex items-center gap-1">
+                                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                    <span>Modèle .json</span>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                Téléversez un fichier JSON contenant les questions que vous posez à vos camarades (avec options et bonne réponse).
+                            </p>
+
+                            <!-- Dropzone Questions JSON -->
+                            <div id="challengeQuestionsDropzone" class="border-2 border-dashed border-rose-900/40 hover:border-rose-500/60 rounded-xl p-4 text-center cursor-pointer transition-all bg-slate-950/40 relative group">
+                                <input type="file" id="challengeQuestionsFileInput" class="hidden" accept=".json">
+                                
+                                <div id="challengeQuestionsDropEmpty" class="space-y-1.5">
+                                    <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                                        <i data-lucide="file-json" class="w-4 h-4"></i>
+                                    </div>
+                                    <div class="text-xs font-medium text-slate-200">Glissez votre fichier <code class="text-rose-300">.json</code> ou <span class="text-rose-400 underline">parcourez</span></div>
+                                    <div class="text-[10px] text-slate-500">Doit contenir un tableau "questions" avec question, options et correct</div>
+                                </div>
+
+                                <div id="challengeQuestionsDropPreview" class="hidden flex items-center justify-between bg-slate-900 border border-rose-500/40 rounded-lg p-2.5 text-left">
+                                    <div class="flex items-center space-x-2.5 overflow-hidden">
+                                        <div class="w-8 h-8 rounded bg-rose-600/20 text-rose-400 flex items-center justify-center flex-shrink-0">
+                                            <i data-lucide="file-code" class="w-4 h-4"></i>
+                                        </div>
+                                        <div class="overflow-hidden">
+                                            <p id="challengePreviewFileName" class="text-xs font-semibold text-white truncate">questions.json</p>
+                                            <p id="challengePreviewCount" class="text-[10px] text-rose-300 font-medium">0 question détectée</p>
+                                        </div>
+                                    </div>
+                                    <button type="button" id="challengeRemoveFileBtn" class="p-1 text-slate-400 hover:text-red-400 rounded">
+                                        <i data-lucide="x" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Alerte pour l'upload questions -->
+                            <div id="challengeQuestionsAlert" class="hidden p-2.5 rounded-xl text-xs"></div>
+
+                            <!-- Bouton Sauvegarder Questions -->
+                            <button type="button" id="uploadChallengeQuestionsBtn" disabled class="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                                <span id="uploadChallengeQuestionsText">Téléverser mes questions</span>
                             </button>
+
+                            <!-- Statut des questions déjà enregistrées dans Supabase -->
+                            <div id="challengeUploadedQuestionsStatus" class="hidden p-3 rounded-xl bg-rose-950/40 border border-rose-700/40 text-xs text-rose-200 flex items-start gap-2.5">
+                                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-white" id="challengeUploadedTitle">Vos questions sont enregistrées !</div>
+                                    <div class="text-[11px] text-slate-300 mt-0.5" id="challengeUploadedDetails">3 questions prêtes pour vos camarades.</div>
+                                </div>
+                            </div>
                         </div>
-                        <p class="text-xs text-slate-400">
-                            Classement basé sur la <strong>meilleure précision</strong> de chaque participant. Votre position est mise en évidence.
-                        </p>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left text-xs">
-                                <thead>
-                                    <tr class="border-b border-purple-800/40 text-slate-400 font-semibold uppercase tracking-wider">
-                                        <th class="pb-3 px-2 w-12">#</th>
-                                        <th class="pb-3 px-2">Participant</th>
-                                        <th class="pb-3 px-2 text-right">Tentatives</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="leaderboardTableBody" class="divide-y divide-slate-800/40 font-medium">
-                                    <tr>
-                                        <td colspan="3" class="py-8 text-center text-slate-500">
-                                            <i data-lucide="loader" class="w-6 h-6 mx-auto mb-2 text-slate-600 animate-spin"></i>
-                                            Chargement du classement...
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+
+                        <!-- 2. ACCÈS AU QCM DES QUESTIONS DES PAIRS -->
+                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                            <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                                <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 text-[11px] flex items-center justify-center font-bold">2</span>
+                                Répondre aux questions de vos camarades
+                            </h4>
+                            <p class="text-xs text-slate-400">
+                                Une fois la session lancée par l'enseignant, accédez au QCM regroupant les questions créées par vos pairs (vos propres questions sont automatiquement exclues).
+                            </p>
+
+                            <!-- Infos questions pairs -->
+                            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs flex items-center justify-between">
+                                <span class="text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="users" class="w-4 h-4 text-rose-400"></i>
+                                    Questions disponibles des pairs :
+                                </span>
+                                <span id="challengePeerQuestionsCountBadge" class="font-bold text-rose-300 font-mono">0</span>
+                            </div>
+
+                            <!-- Bouton Lance le Challenge -->
+                            <button type="button" id="startChallengeQuizBtn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all flex items-center justify-center gap-2.5 cursor-pointer">
+                                <i data-lucide="rocket" class="w-5 h-5 animate-bounce"></i>
+                                <span id="startChallengeBtnText">🚀 Lance le Challenge</span>
+                            </button>
+
+                            <!-- Résultat / Note affichée dès la fin -->
+                            <div id="challengeResultCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-slate-900 to-rose-950/60 border border-rose-500/40 text-center space-y-2">
+                                <div class="text-[10px] uppercase tracking-wider text-rose-300 font-semibold" id="challengeResultCardTitle">Votre Note au Challenge</div>
+                                <div class="text-3xl font-black font-display text-white" id="challengeFinalGradeDisplay">-- / 20</div>
+                                <div class="text-xs text-slate-300" id="challengeFinalGradeDetails">--</div>
+                                <button type="button" id="viewChallengeAnswersBtn" class="text-xs text-rose-400 hover:text-rose-300 underline font-medium">
+                                    Voir le détail des réponses
+                                </button>
+                            </div>
                         </div>
+
                     </div>
+                    </div>
+
                 </div>
 
                 <!-- COLONNE DROITE : HISTORIQUE DES SOUMISSIONS & TENTATIVES (7 cols) -->
@@ -673,6 +760,43 @@
                             <button data-filter="QCM : Modèles Autorégressifs (AR LLMs)" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 hover:text-white border border-amber-800/60">
                                 QCM AR LLMs
                             </button>
+                        </div>
+
+                        <!-- LEADERBOARD CNN CHALLENGER (visible uniquement quand CNN sélectionné) -->
+                        <div id="cnnLeaderboardPanel" class="hidden glass-panel rounded-2xl p-6 border border-purple-800/40 shadow-xl space-y-4 mt-6">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                    <i data-lucide="trophy" class="w-5 h-5 text-purple-400"></i>
+                                    Leaderboard CNN Challenger
+                                </h3>
+                                <button id="refreshLeaderboardBtn" title="Actualiser le classement" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-purple-700 transition-colors">
+                                    <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                Classement publié par l'enseignant, basé sur la <strong>meilleure accuracy CIFAR-10</strong> de chaque participant. Votre position est mise en évidence.
+                            </p>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead>
+                                        <tr class="border-b border-purple-800/40 text-slate-400 font-semibold uppercase tracking-wider">
+                                            <th class="pb-3 px-2 w-10">#</th>
+                                            <th class="pb-3 px-2">Participant</th>
+                                            <th class="pb-3 px-2 text-center">Accuracy</th>
+                                            <th class="pb-3 px-2 text-center">Note</th>
+                                            <th class="pb-3 px-2 text-right">Tentatives</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaderboardTableBody" class="divide-y divide-slate-800/40 font-medium">
+                                        <tr>
+                                            <td colspan="5" class="py-8 text-center text-slate-500">
+                                                <i data-lucide="loader" class="w-6 h-6 mx-auto mb-2 text-slate-600 animate-spin"></i>
+                                                Chargement du classement...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <!-- Tableau des Soumissions -->
@@ -712,6 +836,63 @@
             <span>Hébergé sur GitHub Pages & Sécurisé par Supabase RLS</span>
         </div>
     </footer>
+
+    <!-- MODAL: QCM CHALLENGE YOUR MATE -->
+    <div id="peerQuizModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-3xl rounded-2xl border border-rose-800/50 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+                        <i data-lucide="swords" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-display font-bold text-base text-white">Challenge Your Mate — QCM des Pairs</h3>
+                        <p class="text-xs text-rose-300">Questions conçues par vos camarades de classe</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="peerQuizSessionIndicator" class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> En direct
+                    </span>
+                    <button type="button" id="closePeerQuizModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Warning Enseignant -->
+            <div id="peerQuizTeacherAlert" class="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0 text-amber-400"></i>
+                <span>Session contrôlée par l'enseignant : si l'enseignant arrête le challenge, vos réponses seront automatiquement validées et votre note s'affichera immédiatement.</span>
+            </div>
+
+            <!-- Modal Body (Questions Container) -->
+            <div id="peerQuizBody" class="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+                <div id="peerQuizQuestionsList" class="space-y-6">
+                    <!-- Rempli dynamiquement -->
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div id="peerQuizFooter" class="px-6 py-4 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                <div class="text-xs text-slate-400">
+                    Progression : <span id="peerQuizAnsweredCount" class="font-bold text-white font-mono">0</span> / <span id="peerQuizTotalCount" class="font-bold text-white font-mono">0</span> répondues
+                </div>
+                <button type="button" id="submitPeerQuizBtn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>Valider et Soumettre</span>
+                </button>
+            </div>
+
+            <!-- Modal Review Screen (Affiché après soumission ou après arrêt par l'enseignant) -->
+            <div id="peerQuizReviewScreen" class="hidden p-6 overflow-y-auto max-h-[80vh] space-y-6">
+                <!-- Rempli avec le récapitulatif détaillé et la note -->
+            </div>
+
+        </div>
+    </div>
 
     <!-- TOAST NOTIFICATION CONTAINER -->
     <div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full pointer-events-none"></div>

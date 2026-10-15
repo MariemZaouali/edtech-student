@@ -67,6 +67,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const deadlineBanner = document.getElementById('deadlineBanner');
     const deadlineBannerText = document.getElementById('deadlineBannerText');
 
+    // Éléments Challenge Your Mate
+    const challengeMatePanel = document.getElementById('challengeMatePanel');
+    const challengeSessionStateLabel = document.getElementById('challengeSessionStateLabel');
+    const challengeSessionIndicator = document.getElementById('challengeSessionIndicator');
+    const challengeDownloadTemplateBtn = document.getElementById('challengeDownloadTemplateBtn');
+    const challengeQuestionsDropzone = document.getElementById('challengeQuestionsDropzone');
+    const challengeQuestionsFileInput = document.getElementById('challengeQuestionsFileInput');
+    const challengeQuestionsDropEmpty = document.getElementById('challengeQuestionsDropEmpty');
+    const challengeQuestionsDropPreview = document.getElementById('challengeQuestionsDropPreview');
+    const challengePreviewFileName = document.getElementById('challengePreviewFileName');
+    const challengePreviewCount = document.getElementById('challengePreviewCount');
+    const challengeRemoveFileBtn = document.getElementById('challengeRemoveFileBtn');
+    const uploadChallengeQuestionsBtn = document.getElementById('uploadChallengeQuestionsBtn');
+    const uploadChallengeQuestionsText = document.getElementById('uploadChallengeQuestionsText');
+    const challengeUploadedQuestionsStatus = document.getElementById('challengeUploadedQuestionsStatus');
+    const challengeUploadedTitle = document.getElementById('challengeUploadedTitle');
+    const challengeUploadedDetails = document.getElementById('challengeUploadedDetails');
+    const challengeQuestionsAlert = document.getElementById('challengeQuestionsAlert');
+    const challengePeerQuestionsCountBadge = document.getElementById('challengePeerQuestionsCountBadge');
+    const startChallengeQuizBtn = document.getElementById('startChallengeQuizBtn');
+    const startChallengeBtnText = document.getElementById('startChallengeBtnText');
+    const challengeResultCard = document.getElementById('challengeResultCard');
+    const challengeResultCardTitle = document.getElementById('challengeResultCardTitle');
+    const challengeFinalGradeDisplay = document.getElementById('challengeFinalGradeDisplay');
+    const challengeFinalGradeDetails = document.getElementById('challengeFinalGradeDetails');
+    const viewChallengeAnswersBtn = document.getElementById('viewChallengeAnswersBtn');
+
+    // Modal QCM Challenge Your Mate
+    const peerQuizModal = document.getElementById('peerQuizModal');
+    const closePeerQuizModalBtn = document.getElementById('closePeerQuizModalBtn');
+    const peerQuizSessionIndicator = document.getElementById('peerQuizSessionIndicator');
+    const peerQuizBody = document.getElementById('peerQuizBody');
+    const peerQuizQuestionsList = document.getElementById('peerQuizQuestionsList');
+    const peerQuizFooter = document.getElementById('peerQuizFooter');
+    const peerQuizAnsweredCount = document.getElementById('peerQuizAnsweredCount');
+    const peerQuizTotalCount = document.getElementById('peerQuizTotalCount');
+    const submitPeerQuizBtn = document.getElementById('submitPeerQuizBtn');
+    const peerQuizReviewScreen = document.getElementById('peerQuizReviewScreen');
+    const peerQuizTeacherAlert = document.getElementById('peerQuizTeacherAlert');
+
     // Drag & Drop & Upload
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
@@ -214,20 +254,31 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cnnLatexPanel) cnnLatexPanel.classList.add('hidden');
         }
 
+        // Gérer l'affichage spécifique pour Challenge Your Mate
+        if (assignment.isPeerChallenge) {
+            if (challengeMatePanel) challengeMatePanel.classList.remove('hidden');
+            if (submissionForm) submissionForm.classList.add('hidden');
+            if (interactiveQuizContainer) interactiveQuizContainer.classList.add('hidden');
+            if (bestGradeContainer) bestGradeContainer.classList.add('hidden');
+            initChallengeMate();
+        } else {
+            if (challengeMatePanel) challengeMatePanel.classList.add('hidden');
+            
+            // Basculer affichage QCM Interactif vs Dépôt classique
+            if (assignment.isQuiz) {
+                if (interactiveQuizContainer) interactiveQuizContainer.classList.remove('hidden');
+                if (submissionForm && !isManualUploadVisible) submissionForm.classList.add('hidden');
+                initQcm(assignment);
+            } else {
+                if (interactiveQuizContainer) interactiveQuizContainer.classList.add('hidden');
+                if (submissionForm) submissionForm.classList.remove('hidden');
+                stopQcmTimer();
+                isQcmActive = false;
+            }
+        }
+
         // Affichage de la deadline si définie
         renderDeadlineBanner(assignment);
-
-        // Basculer affichage QCM Interactif vs Dépôt classique
-        if (assignment.isQuiz) {
-            if (interactiveQuizContainer) interactiveQuizContainer.classList.remove('hidden');
-            if (submissionForm && !isManualUploadVisible) submissionForm.classList.add('hidden');
-            initQcm(assignment);
-        } else {
-            if (interactiveQuizContainer) interactiveQuizContainer.classList.add('hidden');
-            if (submissionForm) submissionForm.classList.remove('hidden');
-            stopQcmTimer();
-            isQcmActive = false;
-        }
 
         // Calcul des tentatives pour cet exercice
         updateAttemptsAndBestScore();
@@ -1367,11 +1418,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 10.5 LEADERBOARD CNN
+    // 10.5 LEADERBOARD CNN — lit le snapshot pré-calculé par l'enseignant
     async function fetchCnnLeaderboard() {
         if (!supabase) return;
         try {
-            // First check if it's published by the teacher
+            // 1. Vérifier si le leaderboard est publié (ligne système)
             const { data: publishData } = await supabase
                 .from('submissions')
                 .select('id')
@@ -1385,7 +1436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (leaderboardTableBody) {
                     leaderboardTableBody.innerHTML = `
                         <tr>
-                            <td colspan="3" class="py-8 text-center text-slate-500">
+                            <td colspan="5" class="py-8 text-center text-slate-500">
                                 <i data-lucide="lock" class="w-6 h-6 mx-auto mb-2 text-slate-600"></i>
                                 Le classement n'est pas encore publié par l'enseignant.
                             </td>
@@ -1397,34 +1448,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
+            // 2. Lire le snapshot pré-calculé (zéro recalcul)
             const { data, error } = await supabase
-                .from('submissions')
-                .select('student_id, student_email, grade')
-                .eq('assignment_name', 'CNN Challenger')
-                .not('grade', 'is', null)
-                .neq('student_email', 'SYSTEM_LEADERBOARD_PUBLISHED')
-                .order('grade', { ascending: false });
-            
+                .from('cnn_leaderboard_snapshot')
+                .select('rank, student_email, display_name, accuracy_pct, grade, attempts, max_attempts')
+                .order('rank', { ascending: true });
+
             if (error) throw error;
 
-            const groups = {};
-            data.forEach(sub => {
-                if (!groups[sub.student_id]) {
-                    groups[sub.student_id] = {
-                        student_email: sub.student_email,
-                        best_grade: parseFloat(sub.grade),
-                        attempts: 1
-                    };
-                } else {
-                    groups[sub.student_id].attempts++;
-                    if (parseFloat(sub.grade) > groups[sub.student_id].best_grade) {
-                        groups[sub.student_id].best_grade = parseFloat(sub.grade);
-                    }
-                }
-            });
-
-            cnnLeaderboardData = Object.values(groups).sort((a, b) => b.best_grade - a.best_grade);
-            
+            cnnLeaderboardData = data || [];
             renderLeaderboard();
             updateCnnRankBadge();
 
@@ -1435,11 +1467,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderLeaderboard() {
         if (!leaderboardTableBody) return;
-        
+
         if (cnnLeaderboardData.length === 0) {
             leaderboardTableBody.innerHTML = `
                 <tr>
-                    <td colspan="3" class="py-8 text-center text-slate-500">
+                    <td colspan="5" class="py-8 text-center text-slate-500">
                         <i data-lucide="trophy" class="w-6 h-6 mx-auto mb-2 text-slate-600"></i>
                         Aucune soumission évaluée pour le moment.
                     </td>
@@ -1449,36 +1481,52 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        leaderboardTableBody.innerHTML = cnnLeaderboardData.map((user, index) => {
-            const rank = index + 1;
+        leaderboardTableBody.innerHTML = cnnLeaderboardData.map((user) => {
+            const rank = user.rank;
             const isCurrentUser = currentUser && user.student_email === currentUser.email;
-            
-            let rankBadge = `<span class="font-bold text-slate-400">${rank}</span>`;
-            if (rank === 1) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-gold text-xs font-black shadow-lg">1</span>`;
-            else if (rank === 2) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-silver text-xs font-black shadow-lg">2</span>`;
-            else if (rank === 3) rankBadge = `<span class="inline-flex items-center justify-center w-6 h-6 rounded-full leaderboard-rank-bronze text-xs font-black shadow-lg">3</span>`;
 
-            let displayName = user.student_email.split('@')[0];
-            if (isCurrentUser) displayName += " (Vous)";
+            let rankBadge = `<span class="font-bold text-slate-400">${rank}</span>`;
+            if (rank === 1) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full leaderboard-rank-gold text-xs font-black shadow-lg">1</span>`;
+            else if (rank === 2) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full leaderboard-rank-silver text-xs font-black shadow-lg">2</span>`;
+            else if (rank === 3) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full leaderboard-rank-bronze text-xs font-black shadow-lg">3</span>`;
+
+            // Nom affiché : display_name depuis le snapshot (peut être anonymisé par l'enseignant)
+            let displayName = user.display_name || user.student_email.split('@')[0];
+            if (isCurrentUser) displayName += ' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 ml-1">Vous</span>';
+
+            // Accuracy badge
+            const accuracy = user.accuracy_pct != null
+                ? `<span class="font-semibold ${user.accuracy_pct >= 50 ? 'text-emerald-400' : 'text-amber-400'}">${parseFloat(user.accuracy_pct).toFixed(2)}%</span>`
+                : '<span class="text-slate-500">—</span>';
+
+            // Grade badge
+            const grade = user.grade != null
+                ? `<span class="font-semibold ${user.grade >= 10 ? 'text-emerald-300' : 'text-rose-400'}">${parseFloat(user.grade).toFixed(2)}<span class="text-slate-500 text-[10px]">/20</span></span>`
+                : '<span class="text-slate-500">—</span>';
+
+            // Tentatives
+            const attemptsStr = `<span class="text-slate-400">${user.attempts}<span class="text-slate-600">/${user.max_attempts}</span></span>`;
 
             return `
-                <tr class="leaderboard-row ${isCurrentUser ? 'leaderboard-current-user' : ''} border-b border-slate-800/40">
+                <tr class="leaderboard-row ${isCurrentUser ? 'leaderboard-current-user' : ''} border-b border-slate-800/40 transition-colors hover:bg-slate-800/30">
                     <td class="py-3 px-2">${rankBadge}</td>
-                    <td class="py-3 px-2 font-medium ${isCurrentUser ? 'text-purple-300' : 'text-slate-300'}">${escapeHtml(displayName)}</td>
-                    <td class="py-3 px-2 text-right text-slate-400">${user.attempts}</td>
+                    <td class="py-3 px-2 font-medium ${isCurrentUser ? 'text-purple-300' : 'text-slate-300'}">${displayName}</td>
+                    <td class="py-3 px-2 text-center">${accuracy}</td>
+                    <td class="py-3 px-2 text-center">${grade}</td>
+                    <td class="py-3 px-2 text-right">${attemptsStr}</td>
                 </tr>
             `;
         }).join('');
-        
+
         if (window.lucide) lucide.createIcons();
     }
 
     function updateCnnRankBadge() {
         if (!cnnCurrentRank || !currentUser) return;
-        
-        const myIndex = cnnLeaderboardData.findIndex(u => u.student_email === currentUser.email);
-        if (myIndex !== -1) {
-            const rank = myIndex + 1;
+
+        const myEntry = cnnLeaderboardData.find(u => u.student_email === currentUser.email);
+        if (myEntry) {
+            const rank = myEntry.rank;
             let rankText = `${rank}<sup>e</sup>`;
             if (rank === 1) rankText = `1<sup>er</sup> 🏆`;
             cnnCurrentRank.innerHTML = rankText;
@@ -1493,6 +1541,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast("Classement actualisé.", "info");
         });
     }
+
 
     // =========================================================================
     // 10b. DEADLINE BANNER
@@ -1598,10 +1647,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleLatexFileSelection(file) {
         hideAlert(latexAlert);
-        const allowed = ['.pdf', '.tex', '.zip'];
+        const allowed = ['.tex', '.zip'];
         const name = file.name.toLowerCase();
         if (!allowed.some(ext => name.endsWith(ext))) {
-            showAlert(latexAlert, 'Format non valide. Utilisez .pdf, .tex ou .zip.', 'error');
+            showAlert(latexAlert, 'Format non valide. Utilisez un fichier .tex ou .zip.', 'error');
             return;
         }
         if (file.size > 50 * 1024 * 1024) {
@@ -1727,6 +1776,723 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderLatexReportUI();
             } catch (err) {
                 showAlert(latexAlert, `Erreur suppression : ${err.message}`, 'error');
+            }
+        });
+    }
+
+    // =========================================================================
+    // 10c. CHALLENGE YOUR MATE (PEER-TO-PEER QCM)
+    // =========================================================================
+    let challengeSession = null;
+    let challengeSelectedFile = null;
+    let challengeParsedQuestions = [];
+    let challengeMyQuestionsRecord = null;
+    let challengePeerQuestions = [];
+    let challengeMySubmission = null;
+    let peerQuizUserAnswers = {};
+    let isPeerQuizActive = false;
+    let challengeRealtimeSub = null;
+
+    async function initChallengeMate() {
+        if (!supabase || !currentUser) return;
+        setupChallengeRealtime();
+        await fetchChallengeSession();
+        await fetchMyChallengeQuestions();
+        await fetchPeerQuestionsCount();
+        await fetchMyChallengeSubmission();
+        if (window.lucide) lucide.createIcons();
+    }
+
+    function setupChallengeRealtime() {
+        if (challengeRealtimeSub || !supabase) return;
+        challengeRealtimeSub = supabase
+            .channel('challenge-session-realtime')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'challenge_sessions'
+            }, (payload) => {
+                const newSession = payload.new;
+                if (!newSession) return;
+                const prevStatus = challengeSession ? challengeSession.status : null;
+                challengeSession = newSession;
+                updateChallengeSessionUI();
+
+                if (newSession.status === 'active' && prevStatus !== 'active') {
+                    showToast('🚀 L\'enseignant a lancé le Challenge Your Mate !', 'success');
+                } else if (newSession.status === 'stopped') {
+                    showToast('🛑 L\'enseignant a arrêté le Challenge.', 'warning');
+                    if (isPeerQuizActive) {
+                        // AUTO-SUBMISSION AUTOMATIQUE QUAND L'ENSEIGNANT ARRÊTE
+                        submitPeerQuiz(true);
+                    }
+                }
+            })
+            .subscribe();
+    }
+
+    async function fetchChallengeSession() {
+        if (!supabase) return;
+        try {
+            const { data, error } = await supabase
+                .from('challenge_sessions')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+            challengeSession = data || { status: 'inactive' };
+            updateChallengeSessionUI();
+        } catch (e) {
+            console.warn('Erreur récupération session challenge:', e.message);
+            challengeSession = { status: 'inactive' };
+            updateChallengeSessionUI();
+        }
+    }
+
+    function updateChallengeSessionUI() {
+        if (!challengeSession) return;
+        const status = challengeSession.status || 'inactive';
+
+        if (challengeSessionIndicator) {
+            if (status === 'active') {
+                challengeSessionIndicator.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5';
+                challengeSessionIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> En direct';
+            } else if (status === 'stopped') {
+                challengeSessionIndicator.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center gap-1.5';
+                challengeSessionIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span> Arrêté';
+            } else {
+                challengeSessionIndicator.className = 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5';
+                challengeSessionIndicator.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500"></span> Inactif';
+            }
+        }
+
+        if (challengeSessionStateLabel) {
+            if (status === 'active') {
+                challengeSessionStateLabel.textContent = 'Session en direct ! L\'enseignant a lancé le challenge.';
+                challengeSessionStateLabel.className = 'text-xs text-emerald-400 font-semibold';
+            } else if (status === 'stopped') {
+                challengeSessionStateLabel.textContent = 'Session clôturée par l\'enseignant.';
+                challengeSessionStateLabel.className = 'text-xs text-rose-400 font-semibold';
+            } else {
+                challengeSessionStateLabel.textContent = 'En attente du lancement par l\'enseignant...';
+                challengeSessionStateLabel.className = 'text-xs text-rose-300 font-medium';
+            }
+        }
+
+        // Mettre à jour l'intitulé du bouton principal
+        if (startChallengeBtnText) {
+            if (challengeMySubmission) {
+                startChallengeBtnText.textContent = '📊 Voir mon résultat / mes réponses';
+            } else if (status === 'active') {
+                startChallengeBtnText.textContent = '🚀 Lance le Challenge ! (En direct)';
+            } else if (status === 'stopped') {
+                startChallengeBtnText.textContent = '🛑 Session terminée';
+            } else {
+                startChallengeBtnText.textContent = '⏳ En attente de l\'enseignant...';
+            }
+        }
+    }
+
+    async function fetchMyChallengeQuestions() {
+        if (!supabase || !currentUser) return;
+        try {
+            const { data, error } = await supabase
+                .from('challenge_questions')
+                .select('*')
+                .eq('student_id', currentUser.id)
+                .maybeSingle();
+
+            if (error) throw error;
+            challengeMyQuestionsRecord = data;
+
+            if (data && data.question_count > 0) {
+                if (challengeUploadedQuestionsStatus) challengeUploadedQuestionsStatus.classList.remove('hidden');
+                if (challengeUploadedTitle) challengeUploadedTitle.textContent = 'Vos questions sont enregistrées !';
+                if (challengeUploadedDetails) {
+                    challengeUploadedDetails.textContent = `${data.question_count} question(s) prêtes pour vos camarades (Fichier : ${data.file_name || 'questions.json'}). Vous pouvez téléverser à nouveau pour les mettre à jour.`;
+                }
+            } else {
+                if (challengeUploadedQuestionsStatus) challengeUploadedQuestionsStatus.classList.add('hidden');
+            }
+        } catch (e) {
+            console.warn('Erreur récupération questions étudiant:', e.message);
+        }
+    }
+
+    async function fetchPeerQuestionsCount() {
+        if (!supabase || !currentUser) return;
+        try {
+            const { data, error } = await supabase
+                .from('challenge_questions')
+                .select('questions, question_count')
+                .neq('student_id', currentUser.id);
+
+            if (error) throw error;
+            let total = 0;
+            if (data) {
+                data.forEach(row => {
+                    total += (row.question_count || (Array.isArray(row.questions) ? row.questions.length : 0));
+                });
+            }
+            if (challengePeerQuestionsCountBadge) {
+                challengePeerQuestionsCountBadge.textContent = `${total} question${total > 1 ? 's' : ''}`;
+            }
+        } catch (e) {
+            console.warn('Erreur count questions pairs:', e.message);
+        }
+    }
+
+    async function fetchMyChallengeSubmission() {
+        if (!supabase || !currentUser) return;
+        try {
+            const { data, error } = await supabase
+                .from('challenge_submissions')
+                .select('*')
+                .eq('student_id', currentUser.id)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (error) throw error;
+            challengeMySubmission = data;
+
+            if (data && data.score !== null && data.score !== undefined) {
+                if (challengeResultCard) challengeResultCard.classList.remove('hidden');
+                if (challengeFinalGradeDisplay) {
+                    challengeFinalGradeDisplay.textContent = `${parseFloat(data.score).toFixed(2)} / 20`;
+                    challengeFinalGradeDisplay.className = `text-3xl font-black font-display ${data.score >= 10 ? 'text-emerald-400' : 'text-rose-400'}`;
+                }
+                if (challengeFinalGradeDetails) {
+                    challengeFinalGradeDetails.textContent = `${data.correct_count} / ${data.total_questions} réponses correctes ${data.is_auto_submitted ? '• Auto-soumis à l\'arrêt par l\'enseignant' : '• Soumis manuellement'}`;
+                }
+                updateChallengeSessionUI();
+            } else {
+                if (challengeResultCard) challengeResultCard.classList.add('hidden');
+            }
+        } catch (e) {
+            console.warn('Erreur récupération soumission challenge:', e.message);
+        }
+    }
+
+    // Gestion du fichier JSON téléversé par l'étudiant
+    function normalizeQuestions(rawList) {
+        if (!Array.isArray(rawList)) return [];
+        return rawList.map((item, idx) => {
+            const qText = item.question || `Question ${idx + 1}`;
+            let options = [];
+
+            if (Array.isArray(item.options)) {
+                options = item.options.map((opt, oIdx) => {
+                    if (typeof opt === 'string') {
+                        const defaultKeys = ['A', 'B', 'C', 'D', 'E', 'F'];
+                        return { key: defaultKeys[oIdx] || String(oIdx + 1), text: opt };
+                    } else if (typeof opt === 'object' && opt !== null) {
+                        return { key: opt.key || String.fromCharCode(65 + oIdx), text: opt.text || '' };
+                    }
+                    return { key: String.fromCharCode(65 + oIdx), text: String(opt) };
+                });
+            } else if (typeof item.options === 'object' && item.options !== null) {
+                options = Object.keys(item.options).map(k => ({
+                    key: k.toUpperCase(),
+                    text: item.options[k]
+                }));
+            }
+
+            const correct = (item.correct || 'A').toString().trim().toUpperCase();
+            return {
+                question: qText,
+                options: options,
+                correct: correct
+            };
+        });
+    }
+
+    function handleChallengeFileSelection(file) {
+        hideAlert(challengeQuestionsAlert);
+        if (!file.name.toLowerCase().endsWith('.json')) {
+            showAlert(challengeQuestionsAlert, 'Format non valide. Seul le format .json est accepté.', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                let qList = [];
+                if (Array.isArray(parsed)) {
+                    qList = parsed;
+                } else if (parsed && Array.isArray(parsed.questions)) {
+                    qList = parsed.questions;
+                } else {
+                    throw new Error('Le JSON doit contenir une clé "questions" (tableau) ou être un tableau de questions.');
+                }
+
+                if (qList.length === 0) {
+                    throw new Error('Aucune question trouvée dans le fichier.');
+                }
+
+                challengeParsedQuestions = normalizeQuestions(qList);
+                challengeSelectedFile = file;
+
+                if (challengePreviewFileName) challengePreviewFileName.textContent = file.name;
+                if (challengePreviewCount) challengePreviewCount.textContent = `${challengeParsedQuestions.length} question(s) valide(s)`;
+                if (challengeQuestionsDropEmpty) challengeQuestionsDropEmpty.classList.add('hidden');
+                if (challengeQuestionsDropPreview) challengeQuestionsDropPreview.classList.remove('hidden');
+                if (uploadChallengeQuestionsBtn) uploadChallengeQuestionsBtn.disabled = false;
+                if (window.lucide) lucide.createIcons();
+            } catch (err) {
+                showAlert(challengeQuestionsAlert, `Erreur JSON : ${err.message}`, 'error');
+                resetChallengeFileSelection();
+            }
+        };
+        reader.onerror = () => {
+            showAlert(challengeQuestionsAlert, 'Erreur lors de la lecture du fichier.', 'error');
+            resetChallengeFileSelection();
+        };
+        reader.readAsText(file);
+    }
+
+    function resetChallengeFileSelection() {
+        challengeSelectedFile = null;
+        challengeParsedQuestions = [];
+        if (challengeQuestionsFileInput) challengeQuestionsFileInput.value = '';
+        if (challengeQuestionsDropEmpty) challengeQuestionsDropEmpty.classList.remove('hidden');
+        if (challengeQuestionsDropPreview) challengeQuestionsDropPreview.classList.add('hidden');
+        if (uploadChallengeQuestionsBtn) uploadChallengeQuestionsBtn.disabled = true;
+        if (window.lucide) lucide.createIcons();
+    }
+
+    // Écouteurs drag & drop pour les questions JSON
+    if (challengeQuestionsDropzone && challengeQuestionsFileInput) {
+        challengeQuestionsDropzone.addEventListener('click', (e) => {
+            if (e.target !== challengeRemoveFileBtn && !challengeRemoveFileBtn?.contains(e.target)) {
+                challengeQuestionsFileInput.click();
+            }
+        });
+        ['dragenter', 'dragover'].forEach(ev => challengeQuestionsDropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            challengeQuestionsDropzone.classList.add('border-rose-500');
+        }));
+        ['dragleave', 'drop'].forEach(ev => challengeQuestionsDropzone.addEventListener(ev, (e) => {
+            e.preventDefault(); e.stopPropagation();
+            challengeQuestionsDropzone.classList.remove('border-rose-500');
+        }));
+        challengeQuestionsDropzone.addEventListener('drop', (e) => {
+            const f = e.dataTransfer?.files?.[0];
+            if (f) handleChallengeFileSelection(f);
+        });
+        challengeQuestionsFileInput.addEventListener('change', (e) => {
+            const f = e.target.files?.[0];
+            if (f) handleChallengeFileSelection(f);
+        });
+    }
+
+    if (challengeRemoveFileBtn) {
+        challengeRemoveFileBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            resetChallengeFileSelection();
+        });
+    }
+
+    // Télécharger le modèle de questions
+    if (challengeDownloadTemplateBtn) {
+        challengeDownloadTemplateBtn.addEventListener('click', () => {
+            const a = getCurrentAssignment();
+            const content = a?.templateContent || JSON.stringify({
+                questions: [
+                    {
+                        question: "Quelle est la complexité du tri rapide en moyenne ?",
+                        options: [
+                            { key: "A", text: "O(n)" },
+                            { key: "B", text: "O(n log n)" },
+                            { key: "C", text: "O(n²)" },
+                            { key: "D", text: "O(log n)" }
+                        ],
+                        correct: "B"
+                    }
+                ]
+            }, null, 2);
+            const blob = new Blob([content], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'challenge_questions_template.json';
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    // Bouton enregistrer les questions JSON dans Supabase
+    if (uploadChallengeQuestionsBtn) {
+        uploadChallengeQuestionsBtn.addEventListener('click', async () => {
+            if (!challengeParsedQuestions.length || !currentUser) return;
+            hideAlert(challengeQuestionsAlert);
+            uploadChallengeQuestionsBtn.disabled = true;
+            if (uploadChallengeQuestionsText) uploadChallengeQuestionsText.textContent = 'Enregistrement...';
+
+            try {
+                const payload = {
+                    student_id: currentUser.id,
+                    student_email: currentUser.email,
+                    questions: challengeParsedQuestions,
+                    question_count: challengeParsedQuestions.length,
+                    file_name: challengeSelectedFile?.name || 'questions.json',
+                    updated_at: new Date().toISOString()
+                };
+
+                const { error } = await supabase
+                    .from('challenge_questions')
+                    .upsert(payload, { onConflict: 'student_id' });
+
+                if (error) throw error;
+
+                showAlert(challengeQuestionsAlert, `✅ Vos ${challengeParsedQuestions.length} questions ont été enregistrées avec succès !`, 'success');
+                showToast(`Vos ${challengeParsedQuestions.length} questions sont prêtes pour le challenge !`, 'success');
+                resetChallengeFileSelection();
+                await fetchMyChallengeQuestions();
+                await fetchPeerQuestionsCount();
+            } catch (err) {
+                showAlert(challengeQuestionsAlert, `Erreur : ${err.message}`, 'error');
+            } finally {
+                uploadChallengeQuestionsBtn.disabled = false;
+                if (uploadChallengeQuestionsText) uploadChallengeQuestionsText.textContent = 'Téléverser mes questions';
+            }
+        });
+    }
+
+    // Bouton Principal : Lance le Challenge
+    if (startChallengeQuizBtn) {
+        startChallengeQuizBtn.addEventListener('click', async () => {
+            // Si l'étudiant a déjà une soumission, afficher directement la revue
+            if (challengeMySubmission) {
+                openPeerQuizReview(challengeMySubmission);
+                return;
+            }
+
+            // Vérifier le statut de la session enseignant
+            if (!challengeSession || challengeSession.status !== 'active') {
+                if (challengeSession?.status === 'stopped') {
+                    showToast('🛑 Le challenge a été arrêté par l\'enseignant.', 'warning');
+                } else {
+                    showToast('⏳ L\'enseignant n\'a pas encore lancé la session de challenge. Patientez !', 'warning');
+                }
+                return;
+            }
+
+            // Lancer le QCM avec les questions des pairs
+            await launchLivePeerQuiz();
+        });
+    }
+
+    if (viewChallengeAnswersBtn) {
+        viewChallengeAnswersBtn.addEventListener('click', () => {
+            if (challengeMySubmission) {
+                openPeerQuizReview(challengeMySubmission);
+            }
+        });
+    }
+
+    async function launchLivePeerQuiz() {
+        if (!supabase || !currentUser) return;
+
+        // Récupérer les questions téléversées par TOUS les étudiants SAUF l'étudiant actuel
+        try {
+            const { data, error } = await supabase
+                .from('challenge_questions')
+                .select('*')
+                .neq('student_id', currentUser.id);
+
+            if (error) throw error;
+
+            if (!data || data.length === 0) {
+                showToast('Aucun camarade n\'a encore téléversé de questions. Prévenez vos pairs !', 'warning');
+                return;
+            }
+
+            challengePeerQuestions = [];
+            data.forEach(row => {
+                if (Array.isArray(row.questions)) {
+                    const authorName = (row.student_email || 'Camarade').split('@')[0];
+                    row.questions.forEach((q, idx) => {
+                        let opts = [];
+                        if (Array.isArray(q.options)) {
+                            opts = q.options.map((o, oIdx) => {
+                                if (typeof o === 'string') return { key: String.fromCharCode(65 + oIdx), text: o };
+                                return { key: o.key || String.fromCharCode(65 + oIdx), text: o.text || '' };
+                            });
+                        } else if (typeof q.options === 'object' && q.options !== null) {
+                            opts = Object.keys(q.options).map(k => ({ key: k.toUpperCase(), text: q.options[k] }));
+                        }
+
+                        challengePeerQuestions.push({
+                            id: `${row.student_id}_${idx}`,
+                            author: authorName,
+                            question: q.question,
+                            options: opts,
+                            correct: (q.correct || 'A').toString().trim().toUpperCase()
+                        });
+                    });
+                }
+            });
+
+            if (challengePeerQuestions.length === 0) {
+                showToast('Aucune question disponible provenant de vos camarades.', 'warning');
+                return;
+            }
+
+            // Mélanger les questions pour un challenge dynamique
+            challengePeerQuestions.sort(() => Math.random() - 0.5);
+
+            // Initialiser les réponses de l'étudiant
+            peerQuizUserAnswers = {};
+            isPeerQuizActive = true;
+
+            // Rendu de la modal
+            renderPeerQuizQuestions();
+            if (peerQuizReviewScreen) peerQuizReviewScreen.classList.add('hidden');
+            if (peerQuizBody) peerQuizBody.classList.remove('hidden');
+            if (peerQuizFooter) peerQuizFooter.classList.remove('hidden');
+            if (peerQuizTeacherAlert) peerQuizTeacherAlert.classList.remove('hidden');
+
+            if (peerQuizModal) {
+                peerQuizModal.classList.remove('hidden');
+                peerQuizModal.classList.add('flex');
+            }
+            if (window.lucide) lucide.createIcons();
+        } catch (e) {
+            showToast(`Erreur chargement challenge : ${e.message}`, 'error');
+        }
+    }
+
+    function renderPeerQuizQuestions() {
+        if (!peerQuizQuestionsList) return;
+        const total = challengePeerQuestions.length;
+        if (peerQuizTotalCount) peerQuizTotalCount.textContent = total;
+        updatePeerQuizAnsweredProgress();
+
+        peerQuizQuestionsList.innerHTML = challengePeerQuestions.map((q, idx) => {
+            const currentAnswer = peerQuizUserAnswers[q.id];
+
+            const optionsHtml = q.options.map(opt => {
+                const isSelected = currentAnswer === opt.key;
+                return `
+                    <label class="peer-quiz-opt flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                        isSelected 
+                            ? 'bg-rose-500/20 border-rose-500 text-white font-medium shadow-md shadow-rose-500/10' 
+                            : 'bg-slate-900/60 border-slate-800 hover:border-slate-700 text-slate-300'
+                    }">
+                        <input type="radio" name="opt_${q.id}" value="${opt.key}" ${isSelected ? 'checked' : ''} class="hidden" 
+                            onchange="window.selectPeerQuizAnswer('${q.id}', '${opt.key}')">
+                        <span class="w-6 h-6 rounded-lg ${isSelected ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-400'} text-xs font-bold flex items-center justify-center flex-shrink-0">
+                            ${opt.key}
+                        </span>
+                        <span class="text-xs flex-1 leading-relaxed mt-0.5">${escapeHtml(opt.text)}</span>
+                    </label>
+                `;
+            }).join('');
+
+            return `
+                <div class="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-3.5 shadow-lg" id="card_${q.id}">
+                    <div class="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                        <span class="text-xs font-bold text-rose-400 uppercase tracking-wider">
+                            Question ${idx + 1} / ${total}
+                        </span>
+                        <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+                            <i data-lucide="user" class="w-3 h-3 text-rose-400"></i> Proposée par <strong class="text-slate-300">${escapeHtml(q.author)}</strong>
+                        </span>
+                    </div>
+                    <div class="text-sm font-semibold text-white leading-relaxed">
+                        ${escapeHtml(q.question)}
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        ${optionsHtml}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (window.lucide) lucide.createIcons();
+    }
+
+    window.selectPeerQuizAnswer = function(questionId, optionKey) {
+        peerQuizUserAnswers[questionId] = optionKey;
+        updatePeerQuizAnsweredProgress();
+        renderPeerQuizQuestions();
+    };
+
+    function updatePeerQuizAnsweredProgress() {
+        const answered = Object.keys(peerQuizUserAnswers).length;
+        if (peerQuizAnsweredCount) peerQuizAnsweredCount.textContent = answered;
+    }
+
+    // Soumission du QCM (manuelle ou automatique quand l'enseignant arrête)
+    async function submitPeerQuiz(isAuto = false) {
+        if (!currentUser) return;
+        isPeerQuizActive = false;
+
+        let correctCount = 0;
+        const total = challengePeerQuestions.length;
+
+        challengePeerQuestions.forEach(q => {
+            const userAns = (peerQuizUserAnswers[q.id] || '').toString().trim().toUpperCase();
+            if (userAns && userAns === q.correct) {
+                correctCount++;
+            }
+        });
+
+        const score = total > 0 ? Number(((correctCount / total) * 20).toFixed(2)) : 0;
+
+        const submissionData = {
+            student_id: currentUser.id,
+            student_email: currentUser.email,
+            session_id: challengeSession?.id || '00000000-0000-0000-0000-000000000001',
+            answers: peerQuizUserAnswers,
+            questions_served: challengePeerQuestions,
+            score: score,
+            total_questions: total,
+            correct_count: correctCount,
+            is_auto_submitted: isAuto,
+            submitted_at: new Date().toISOString()
+        };
+
+        try {
+            await supabase.from('challenge_submissions').upsert(submissionData, {
+                onConflict: 'student_id,session_id'
+            });
+
+            // Sauvegarder également dans la table submissions générale pour affichage dans l'historique global
+            await supabase.from('submissions').insert({
+                student_id: currentUser.id,
+                student_email: currentUser.email,
+                assignment_name: "Challenge Your Mate",
+                file_name: "challenge_quiz_answers.json",
+                file_path: `challenge/${currentUser.id}/${Date.now()}.json`,
+                status: "Évalué",
+                grade: score,
+                evaluation_feedback: `Challenge Your Mate : ${correctCount}/${total} bonnes réponses (${score}/20)${isAuto ? ' [Auto-soumis à l\'arrêt par l\'enseignant]' : ''}`,
+                created_at: new Date().toISOString()
+            }).catch(() => {});
+        } catch (e) {
+            console.error('Erreur sauvegarde soumission challenge:', e);
+        }
+
+        challengeMySubmission = submissionData;
+
+        // Mise à jour de la carte de résultat principale
+        if (challengeResultCard) challengeResultCard.classList.remove('hidden');
+        if (challengeFinalGradeDisplay) {
+            challengeFinalGradeDisplay.textContent = `${score.toFixed(2)} / 20`;
+            challengeFinalGradeDisplay.className = `text-3xl font-black font-display ${score >= 10 ? 'text-emerald-400' : 'text-rose-400'}`;
+        }
+        if (challengeFinalGradeDetails) {
+            challengeFinalGradeDetails.textContent = `${correctCount} / ${total} réponses correctes ${isAuto ? '• Auto-soumis à l\'arrêt par l\'enseignant' : '• Soumis manuellement'}`;
+        }
+        updateChallengeSessionUI();
+
+        // Afficher l'écran de revue détaillé dans la modal
+        openPeerQuizReview(submissionData);
+        fetchSubmissions();
+    }
+
+    if (submitPeerQuizBtn) {
+        submitPeerQuizBtn.addEventListener('click', () => {
+            const answered = Object.keys(peerQuizUserAnswers).length;
+            const total = challengePeerQuestions.length;
+            if (answered < total) {
+                if (!confirm(`Vous avez répondu à ${answered} / ${total} questions. Voulez-vous vraiment valider et obtenir votre note dès maintenant ?`)) {
+                    return;
+                }
+            }
+            submitPeerQuiz(false);
+        });
+    }
+
+    function openPeerQuizReview(sub) {
+        if (!sub) return;
+        const questions = sub.questions_served || [];
+        const answers = sub.answers || {};
+        const score = sub.score !== null ? parseFloat(sub.score).toFixed(2) : '--';
+
+        if (peerQuizBody) peerQuizBody.classList.add('hidden');
+        if (peerQuizFooter) peerQuizFooter.classList.add('hidden');
+        if (peerQuizTeacherAlert) peerQuizTeacherAlert.classList.add('hidden');
+
+        if (peerQuizReviewScreen) {
+            peerQuizReviewScreen.classList.remove('hidden');
+            peerQuizReviewScreen.innerHTML = `
+                <div class="space-y-6">
+                    <!-- Bannière Score -->
+                    <div class="p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-rose-950/70 border border-rose-500/40 text-center space-y-2 shadow-xl">
+                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${sub.is_auto_submitted ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
+                            <i data-lucide="${sub.is_auto_submitted ? 'clock' : 'check-circle'}" class="w-4 h-4"></i>
+                            ${sub.is_auto_submitted ? 'Challenge arrêté par l\'enseignant • Note finale calculée automatiquement' : 'Challenge validé par l\'étudiant'}
+                        </div>
+                        <div class="text-4xl font-black font-display ${sub.score >= 10 ? 'text-emerald-400' : 'text-rose-400'}">
+                            ${score} <span class="text-lg text-slate-500">/ 20</span>
+                        </div>
+                        <p class="text-xs text-slate-300">
+                            <strong>${sub.correct_count}</strong> bonne(s) réponse(s) sur <strong>${sub.total_questions}</strong> questions proposées par vos camarades.
+                        </p>
+                    </div>
+
+                    <!-- Liste détaillée des réponses -->
+                    <div class="space-y-4">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                            <i data-lucide="list-checks" class="w-4 h-4 text-rose-400"></i>
+                            Détail de vos réponses
+                        </h4>
+                        ${questions.map((q, idx) => {
+                            const userAns = answers[q.id];
+                            const isCorrect = userAns === q.correct;
+
+                            return `
+                                <div class="p-4 rounded-xl border ${isCorrect ? 'bg-emerald-950/20 border-emerald-800/40' : 'bg-rose-950/20 border-rose-800/40'} space-y-2.5">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-bold text-white">Question ${idx + 1}</span>
+                                        <span class="text-[11px] px-2 py-0.5 rounded-full font-semibold ${isCorrect ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">
+                                            ${isCorrect ? '✅ Correct' : userAns ? '❌ Erreur' : '⚪ Non répondue'}
+                                        </span>
+                                    </div>
+                                    <div class="text-xs text-slate-200 font-medium">
+                                        ${escapeHtml(q.question)}
+                                    </div>
+                                    <div class="text-[11px] space-y-1 pt-1">
+                                        <div class="text-slate-400">Votre réponse : <strong class="${isCorrect ? 'text-emerald-300' : 'text-rose-300'}">${userAns || 'Aucune'}</strong></div>
+                                        ${!isCorrect ? `<div class="text-slate-400">Bonne réponse attendue : <strong class="text-emerald-400">${q.correct}</strong></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+
+                    <!-- Bouton Fermer -->
+                    <button type="button" onclick="document.getElementById('closePeerQuizModalBtn').click()" class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-colors">
+                        Fermer le récapitulatif
+                    </button>
+                </div>
+            `;
+            if (window.lucide) lucide.createIcons();
+        }
+
+        if (peerQuizModal) {
+            peerQuizModal.classList.remove('hidden');
+            peerQuizModal.classList.add('flex');
+        }
+    }
+
+    if (closePeerQuizModalBtn) {
+        closePeerQuizModalBtn.addEventListener('click', () => {
+            if (isPeerQuizActive) {
+                if (!confirm('Attention : Si vous fermez maintenant, vos réponses en cours seront perdues jusqu\'à la prochaine ouverture. Confirmer ?')) {
+                    return;
+                }
+            }
+            isPeerQuizActive = false;
+            if (peerQuizModal) {
+                peerQuizModal.classList.add('hidden');
+                peerQuizModal.classList.remove('flex');
             }
         });
     }

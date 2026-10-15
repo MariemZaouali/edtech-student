@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdTech CodeLab • Espace Étudiant (GenAI)</title>
+    <meta name="description" content="Plateforme d'évaluation pour cours d'IA et de Code. Soumission d'exercices Optimizer, CNN Challenger, LSTM vs RNN et QCM AR LLMs avec calcul de la meilleure note.">
+    
+    <!-- Polices Google : Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Canvas Confetti CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Supabase JS Client v2 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 9999px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.8); }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.78);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .dropzone-active {
+            border-color: #818cf8 !important;
+            background-color: rgba(99, 102, 241, 0.12) !important;
+            transform: scale(1.01);
+        }
+
+        .badge-best {
+            background: linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(202, 138, 4, 0.3) 100%);
+            border: 1px solid rgba(234, 179, 8, 0.5);
+            color: #fde047;
+        }
+
+        /* Leaderboard Styles */
+        .leaderboard-row {
+            transition: all 0.3s ease;
+        }
+        .leaderboard-row:hover {
+            transform: translateX(4px);
+            background-color: rgba(99, 102, 241, 0.08);
+        }
+        .leaderboard-rank-gold {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: #451a03;
+            box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+        }
+        .leaderboard-rank-silver {
+            background: linear-gradient(135deg, #d1d5db, #9ca3af);
+            color: #1f2937;
+            box-shadow: 0 0 10px rgba(209, 213, 219, 0.3);
+        }
+        .leaderboard-rank-bronze {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            color: #fffbeb;
+            box-shadow: 0 0 10px rgba(217, 119, 6, 0.3);
+        }
+        .leaderboard-current-user {
+            background: rgba(99, 102, 241, 0.12) !important;
+            border-left: 3px solid #818cf8 !important;
+        }
+        @keyframes slideInFromRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .leaderboard-animate {
+            animation: slideInFromRight 0.4s ease forwards;
+        }
+
+        /* Rapport LaTeX Upload */
+        .latex-dropzone {
+            border: 2px dashed rgba(168, 85, 247, 0.4);
+            transition: all 0.25s ease;
+        }
+        .latex-dropzone:hover, .latex-dropzone.dropzone-active {
+            border-color: #a855f7;
+            background: rgba(168, 85, 247, 0.08);
+            transform: scale(1.01);
+        }
+        .deadline-badge {
+            background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(234,179,8,0.12) 100%);
+            border: 1px solid rgba(239,68,68,0.35);
+        }
+        .deadline-badge.ok {
+            background: linear-gradient(135deg, rgba(16,185,129,0.1) 0%, rgba(6,182,212,0.08) 100%);
+            border: 1px solid rgba(16,185,129,0.3);
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .deadline-urgent { animation: pulse-soft 1.8s ease infinite; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-brand-500 selection:text-white flex flex-col relative overflow-x-hidden">
+
+    <!-- Background glowing ambient effects -->
+    <div class="fixed top-0 left-1/4 w-96 h-96 bg-brand-600/15 rounded-full blur-3xl pointer-events-none -z-10"></div>
+    <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-indigo-900/15 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+    <!-- HEADER / NAVIGATION -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/80 px-6 py-4 transition-all">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-400 flex items-center justify-center shadow-lg shadow-brand-500/20 text-white font-bold">
+                    <i data-lucide="code-2" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <span class="font-display font-bold text-lg tracking-tight text-white flex items-center gap-2">
+                        EdTech <span class="text-brand-400">CodeLab</span>
+                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">Étudiant</span>
+                    </span>
+                    <p class="text-xs text-slate-400">Portail de Soumission & Évaluation Continue</p>
+                </div>
+            </div>
+
+            <!-- Header Right: User Profile -->
+            <div id="userHeaderSection" class="flex items-center space-x-4">
+                <div id="authProfilePill" class="hidden items-center space-x-3 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold font-display" id="userAvatar">
+                        É
+                    </div>
+                    <div class="hidden sm:block text-left">
+                        <div class="text-xs font-semibold text-slate-200" id="userEmailText">etudiant@ecole.fr</div>
+                        <div class="text-[10px] text-slate-400">Rôle : Étudiant</div>
+                    </div>
+                    <button id="logoutBtn" title="Déconnexion" class="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors ml-1">
+                        <i data-lucide="log-out" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 py-8">
+        
+        <!-- SECTION 1 : AUTHENTIFICATION -->
+        <section id="authSection" class="max-w-md mx-auto my-12">
+            <div class="glass-panel rounded-2xl p-8 shadow-2xl shadow-black/50 border border-slate-800">
+                <div class="text-center mb-6">
+                    <div class="w-14 h-14 mx-auto rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center justify-center text-brand-400 mb-3 shadow-inner">
+                        <i data-lucide="lock" class="w-7 h-7"></i>
+                    </div>
+                    <h1 class="font-display text-2xl font-bold text-white" id="authFormTitle">Connexion Étudiant</h1>
+                    <p class="text-xs text-slate-400 mt-1">Accédez à votre espace pour soumettre vos devoirs.</p>
+                </div>
+
+                <!-- Tabs Connexion / Inscription -->
+                <div class="flex p-1 bg-slate-900/90 rounded-xl mb-6 border border-slate-800">
+                    <button id="tabLogin" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-brand-600 text-white transition-all shadow">
+                        Se connecter
+                    </button>
+                    <button id="tabRegister" class="flex-1 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition-all">
+                        Créer un compte
+                    </button>
+                </div>
+
+                <form id="authForm" class="space-y-4">
+                    <div id="nameFieldContainer" class="hidden">
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Nom complet ou Pseudo</label>
+                        <div class="relative">
+                            <i data-lucide="user" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="text" id="authNameInput" placeholder="ex: Meriam Z." 
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Adresse Email</label>
+                        <div class="relative">
+                            <i data-lucide="mail" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="email" id="authEmailInput" required placeholder="nom@etudiant.univ.fr" 
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium text-slate-300 mb-1.5">Mot de passe</label>
+                        <div class="relative">
+                            <i data-lucide="key-round" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-500"></i>
+                            <input type="password" id="authPasswordInput" required placeholder="••••••••" minlength="6"
+                                   class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-500">
+                        </div>
+                        <div class="flex justify-end mt-1.5" id="forgotPasswordContainer">
+                            <button type="button" id="forgotPasswordBtn" class="text-[11px] text-brand-400 hover:text-brand-300 transition-colors">Mot de passe oublié ?</button>
+                        </div>
+                    </div>
+
+                    <div id="authAlert" class="hidden p-3 rounded-xl text-xs flex items-start space-x-2"></div>
+
+                    <button type="submit" id="authSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/25 transition-all flex items-center justify-center space-x-2">
+                        <span id="authSubmitText">Se connecter</span>
+                        <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </form>
+
+                <!-- Configuration Warning Banner -->
+                <div id="configWarning" class="hidden mt-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
+                    <div class="flex items-center gap-2 font-semibold">
+                        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400"></i>
+                        <span>Configuration requise</span>
+                    </div>
+                    <p class="mt-1 text-[11px] text-amber-200/80">
+                        Renseignez votre <code class="bg-amber-950 px-1 rounded text-amber-300">URL</code> et <code class="bg-amber-950 px-1 rounded text-amber-300">ANON_KEY</code> dans <code class="underline">config.js</code>.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2 : ESPACE ÉTUDIANT (Connecté) -->
+        <section id="studentDashboard" class="hidden space-y-8">
+            
+            <!-- Bandeau de Bienvenue & Statut Global -->
+            <div class="glass-panel rounded-2xl p-6 relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 border border-slate-800">
+                <div class="relative z-10">
+                    <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30 mb-2">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        Matière active : GenAI
+                    </div>
+                    <h2 class="font-display text-2xl font-bold text-white flex items-center gap-2">
+                        Bienvenue, <span id="studentGreetingName" class="text-brand-400">Étudiant</span> 👋
+                    </h2>
+                    <p class="text-slate-400 text-sm mt-1">
+                        Pour chaque exercice, vous avez droit à <strong>3 tentatives</strong>. La <strong>meilleure note</strong> est automatiquement retenue.
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center">
+                        <div class="text-xs text-slate-400">Total Soumissions</div>
+                        <div class="text-lg font-bold text-white font-display" id="statSubmittedCount">0</div>
+                    </div>
+                    <div class="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-2.5 text-center">
+                        <div class="text-xs text-slate-400">Moyenne (Meilleures Notes)</div>
+                        <div class="text-lg font-bold text-emerald-400 font-display" id="statAverageGrade">--/20</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grille Principale : Dépôt & Historique -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                
+                <!-- COLONNE GAUCHE : ZONE DE DÉPÔT / EXERCICE (5 cols) -->
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl space-y-5">
+                        
+                        <!-- En-tête nouveau dépôt -->
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                <i data-lucide="upload-cloud" class="w-5 h-5 text-brand-400"></i>
+                                Déposer un Exercice
+                            </h3>
+                            <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-700">
+                                Max 3 tentatives
+                            </span>
+                        </div>
+
+                        <!-- 1. Sélection Matière & Exercice -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                                <label for="courseSelect" class="block text-xs font-semibold text-slate-300 mb-1">
+                                    Matière
+                                </label>
+                                <div class="relative">
+                                    <select id="courseSelect" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500 appearance-none cursor-pointer">
+                                        <option value="genai" selected>GenAI</option>
+                                    </select>
+                                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <label for="assignmentSelect" class="block text-xs font-semibold text-slate-300 mb-1">
+                                    Évaluation / Exercice
+                                </label>
+                                <div class="relative">
+                                    <select id="assignmentSelect" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500 appearance-none cursor-pointer">
+                                        <!-- Rempli dynamiquement -->
+                                    </select>
+                                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 absolute right-3 top-3 text-slate-400 pointer-events-none"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Fiche Détails Exercice Sélectionné & Tentatives -->
+                        <div id="exerciseCard" class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <span id="exerciseBadge" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                                        Optimizer
+                                    </span>
+                                    <span id="exerciseTypeBadge" class="text-[11px] text-slate-400">
+                                        Fichier .json
+                                    </span>
+                                </div>
+                                <!-- Compteur interactif de tentatives -->
+                                <div class="flex items-center gap-1.5" id="attemptsPill">
+                                    <span class="text-[11px] text-slate-400">Tentatives :</span>
+                                    <span id="attemptsCounter" class="text-xs font-bold text-white px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700">0 / 3</span>
+                                </div>
+                            </div>
+
+                            <!-- Encadré Meilleure Note (masqué pour CNN) -->
+                            <div id="bestGradeContainer" class="flex items-center justify-between p-2.5 rounded-lg bg-slate-950/70 border border-slate-800">
+                                <span class="text-xs text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="award" class="w-4 h-4 text-amber-400"></i>
+                                    Meilleure note retenue :
+                                </span>
+                                <span id="exerciseBestGrade" class="text-sm font-bold font-display text-emerald-400">
+                                    -- / 20
+                                </span>
+                            </div>
+
+                            <!-- Encadré Classement CNN (visible seulement pour CNN Challenger) -->
+                            <div id="cnnRankContainer" class="hidden flex items-center justify-between p-2.5 rounded-lg bg-purple-950/40 border border-purple-800/50">
+                                <span class="text-xs text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="trophy" class="w-4 h-4 text-purple-400"></i>
+                                    Votre classement :
+                                </span>
+                                <span id="cnnCurrentRank" class="text-sm font-bold font-display text-purple-300">
+                                    -- 
+                                </span>
+                            </div>
+
+                            <!-- Description et consignes -->
+                            <div id="exerciseDescription" class="text-xs text-slate-300 leading-relaxed">
+                                <!-- Rempli dynamiquement -->
+                            </div>
+
+                            <!-- Deadline Banner (rempli dynamiquement) -->
+                            <div id="deadlineBanner" class="hidden deadline-badge rounded-xl px-3 py-2 flex items-center gap-2">
+                                <i data-lucide="clock" class="w-4 h-4 text-red-400 flex-shrink-0"></i>
+                                <span id="deadlineBannerText" class="text-xs font-semibold text-red-300"></span>
+                            </div>
+
+                            <!-- Bouton Télécharger Gabarit -->
+                            <div class="pt-1 flex items-center justify-between">
+                                <button type="button" id="downloadTemplateBtn" class="text-xs font-semibold text-brand-400 hover:text-brand-300 hover:underline flex items-center gap-1 transition-colors">
+                                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                    <span>Télécharger le gabarit d'exemple</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 2bis. Module Interactif QCM (Actif si exercice QCM sélectionné) -->
+                        <div id="interactiveQuizContainer" class="hidden space-y-4">
+                            <!-- Barre d'état QCM : Chronomètre & Section -->
+                            <div class="p-3 rounded-xl bg-slate-900 border border-amber-500/30 flex items-center justify-between shadow-lg">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                                    <span id="qcmSectionBadge" class="text-[11px] font-semibold text-amber-300 truncate max-w-[190px] sm:max-w-[270px]">
+                                        Section 1 : Prétraitement
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-950/70 border border-amber-800 text-amber-300 font-mono text-xs font-bold shadow-inner" id="qcmTimerBox">
+                                    <i data-lucide="clock" class="w-3.5 h-3.5 text-amber-400"></i>
+                                    <span id="qcmTimerText">20:00</span>
+                                </div>
+                            </div>
+
+                            <!-- Progression : Barre + Chiffres -->
+                            <div class="space-y-1.5">
+                                <div class="flex items-center justify-between text-xs text-slate-300">
+                                    <span class="font-semibold flex items-center gap-1.5">
+                                        <span>Question</span>
+                                        <span id="qcmCurrentIndexText" class="text-amber-400 font-bold">1</span>
+                                        <span class="text-slate-500">/ 10</span>
+                                    </span>
+                                    <span id="qcmAnsweredCountText" class="text-[11px] text-slate-400">0 / 10 répondue(s)</span>
+                                </div>
+                                <div class="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                                    <div id="qcmProgressBar" class="bg-gradient-to-r from-amber-500 to-brand-500 h-full rounded-full w-[10%] transition-all duration-300"></div>
+                                </div>
+
+                                <!-- Grille de Navigation Rapide des Questions (Puces 1 à 10) -->
+                                <div class="flex items-center justify-between gap-1 pt-1.5" id="qcmNavDots">
+                                    <!-- Rempli dynamiquement (1..10) -->
+                                </div>
+                            </div>
+
+                            <!-- Carte de la Question Active -->
+                            <div class="p-4 rounded-xl bg-slate-900/90 border border-slate-700 space-y-4 shadow-xl">
+                                <div class="text-sm font-semibold text-white leading-relaxed" id="qcmQuestionText">
+                                    Chargement de la question...
+                                </div>
+
+                                <!-- Options de Réponses (A, B, C, D) -->
+                                <div class="space-y-2.5" id="qcmOptionsContainer">
+                                    <!-- Rempli dynamiquement -->
+                                </div>
+                            </div>
+
+                            <!-- Boutons de Navigation du QCM -->
+                            <div class="flex items-center justify-between gap-2 pt-1">
+                                <button type="button" id="qcmPrevBtn" class="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                                    <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                                    <span>Précédent</span>
+                                </button>
+                                
+                                <button type="button" id="qcmNextBtn" class="flex-1 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-lg shadow-brand-500/20 transition-all">
+                                    <span>Suivant</span>
+                                    <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                                </button>
+
+                                <button type="button" id="qcmFinishBtn" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all">
+                                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                                    <span>Terminer</span>
+                                </button>
+                            </div>
+
+                            <!-- Alert spécifique QCM -->
+                            <div id="qcmAlert" class="hidden p-3 rounded-xl text-xs"></div>
+
+                            <!-- Option alternative : téléversement direct d'un fichier .json -->
+                            <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                                <button type="button" id="toggleQcmManualUpload" class="text-[11px] text-slate-400 hover:text-slate-300 underline flex items-center gap-1 transition-colors">
+                                    <i data-lucide="file-json" class="w-3.5 h-3.5"></i>
+                                    <span>Ou téléverser un fichier .json préparé</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 3. Formulaire de Dépôt / Upload Standard -->
+                        <form id="submissionForm" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    Sélectionnez ou glissez votre fichier
+                                </label>
+                                
+                                <div id="dropzone" class="border-2 border-dashed border-slate-700 hover:border-brand-500 rounded-2xl p-6 text-center cursor-pointer transition-all duration-200 bg-slate-900/40 relative group">
+                                    <input type="file" id="fileInput" class="hidden">
+                                    
+                                    <div id="dropzoneEmpty" class="space-y-2">
+                                        <div class="w-12 h-12 rounded-xl bg-brand-500/10 text-brand-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                                            <i data-lucide="file-up" class="w-6 h-6"></i>
+                                        </div>
+                                        <div class="text-sm font-medium text-slate-200">
+                                            Glissez votre fichier ici ou <span class="text-brand-400 underline">parcourez</span>
+                                        </div>
+                                        <div id="dropzoneAllowedText" class="text-[11px] text-slate-400">
+                                            Format attendu selon l'exercice sélectionné
+                                        </div>
+                                    </div>
+
+                                    <!-- Fichier sélectionné preview -->
+                                    <div id="dropzonePreview" class="hidden flex items-center justify-between bg-slate-900 border border-brand-500/40 rounded-xl p-3 text-left">
+                                        <div class="flex items-center space-x-3 overflow-hidden">
+                                            <div id="fileTypeIcon" class="w-10 h-10 rounded-lg bg-brand-600/20 text-brand-400 flex items-center justify-center flex-shrink-0">
+                                                <i data-lucide="file-code" class="w-5 h-5"></i>
+                                            </div>
+                                            <div class="overflow-hidden">
+                                                <p id="previewFileName" class="text-xs font-semibold text-white truncate">mon_fichier</p>
+                                                <p id="previewFileSize" class="text-[10px] text-slate-400">0 Ko</p>
+                                            </div>
+                                        </div>
+                                        <button type="button" id="removeFileBtn" class="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors">
+                                            <i data-lucide="x" class="w-4 h-4"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Barre de Progression Téléversement -->
+                            <div id="uploadProgressContainer" class="hidden space-y-1.5">
+                                <div class="flex justify-between text-xs text-slate-400">
+                                    <span id="uploadProgressLabel">Envoi vers Supabase Storage...</span>
+                                    <span id="uploadProgressPercent">0%</span>
+                                </div>
+                                <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden">
+                                    <div id="uploadProgressBar" class="bg-brand-500 h-full rounded-full w-0 transition-all duration-300"></div>
+                                </div>
+                            </div>
+
+                            <!-- Alert Box -->
+                            <div id="uploadAlert" class="hidden p-3 rounded-xl text-xs"></div>
+
+                            <!-- Bouton Soumission -->
+                            <button type="submit" id="submitDeliverableBtn" disabled class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm shadow-lg shadow-brand-500/20 transition-all flex items-center justify-center space-x-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                                <i data-lucide="send" class="w-4 h-4"></i>
+                                <span id="submitDeliverableText">Soumettre la tentative</span>
+                            </button>
+                        </form>
+
+                    </div>
+
+                    <!-- RAPPORT LATEX CNN CHALLENGER (visible uniquement quand CNN sélectionné) -->
+                    <div id="cnnLatexPanel" class="hidden glass-panel rounded-2xl p-6 border border-purple-800/40 shadow-xl space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-display font-bold text-base text-white flex items-center gap-2">
+                                <i data-lucide="file-text" class="w-5 h-5 text-purple-400"></i>
+                                Rapport LaTeX CNN
+                            </h3>
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-900/60 text-purple-300 border border-purple-700/50">1 fichier max</span>
+                        </div>
+                        <p class="text-xs text-slate-400">Déposez votre rapport LaTeX source <code class="bg-slate-800 px-1 rounded text-purple-300">.tex</code> ou archive <code class="bg-slate-800 px-1 rounded text-purple-300">.zip</code> pour le challenge CNN. Formats acceptés : <strong class="text-purple-300">.tex, .zip</strong>. Vous pouvez le remplacer à tout moment jusqu'à la deadline.</p>
+
+                        <!-- Zone de dépôt LaTeX -->
+                        <div id="latexDropzone" class="latex-dropzone rounded-2xl p-5 text-center cursor-pointer bg-slate-900/40 relative group">
+                            <input type="file" id="latexFileInput" class="hidden" accept=".tex,.zip">
+
+                            <div id="latexDropzoneEmpty" class="space-y-2">
+                                <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                                    <i data-lucide="file-text" class="w-5 h-5"></i>
+                                </div>
+                                <div class="text-sm font-medium text-slate-200">Glissez votre rapport ou <span class="text-purple-400 underline">parcourez</span></div>
+                                <div class="text-[11px] text-slate-400">Formats acceptés : <strong class="text-purple-300">.tex, .zip</strong> • Max 50 Mo</div>
+                            </div>
+
+                            <div id="latexDropzonePreview" class="hidden items-center justify-between bg-slate-900 border border-purple-500/40 rounded-xl p-3 text-left">
+                                <div class="flex items-center space-x-3 overflow-hidden">
+                                    <div class="w-10 h-10 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center flex-shrink-0">
+                                        <i data-lucide="file-text" class="w-5 h-5"></i>
+                                    </div>
+                                    <div class="overflow-hidden">
+                                        <p id="latexPreviewFileName" class="text-xs font-semibold text-white truncate">rapport.pdf</p>
+                                        <p id="latexPreviewFileSize" class="text-[10px] text-slate-400">0 Ko</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="latexRemoveFileBtn" class="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors">
+                                    <i data-lucide="x" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Rapport déjà déposé -->
+                        <div id="latexExistingReport" class="hidden p-3 rounded-xl bg-purple-950/40 border border-purple-700/50 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
+                                    <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                                    Rapport déposé :
+                                </span>
+                                <a id="latexExistingLink" href="#" target="_blank" class="text-[11px] text-purple-400 hover:underline flex items-center gap-1">
+                                    <i data-lucide="external-link" class="w-3 h-3"></i>
+                                    Ouvrir
+                                </a>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span id="latexExistingName" class="text-xs text-slate-300 font-mono truncate max-w-[200px]"></span>
+                                <button type="button" id="latexDeleteExistingBtn" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-red-400 bg-red-950/50 border border-red-800/50 hover:bg-red-900/60 transition-colors flex items-center gap-1">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    Supprimer
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Barre de progression -->
+                        <div id="latexProgressContainer" class="hidden space-y-1.5">
+                            <div class="flex justify-between text-xs text-slate-400">
+                                <span id="latexProgressLabel">Téléversement...</span>
+                                <span id="latexProgressPercent">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-900 rounded-full h-2 overflow-hidden">
+                                <div id="latexProgressBar" class="bg-purple-500 h-full rounded-full w-0 transition-all duration-300"></div>
+                            </div>
+                        </div>
+
+                        <!-- Alert -->
+                        <div id="latexAlert" class="hidden p-3 rounded-xl text-xs"></div>
+
+                        <!-- Bouton Soumettre rapport -->
+                        <button type="button" id="latexSubmitBtn" disabled
+                            class="w-full py-2.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-semibold text-xs shadow-lg shadow-purple-700/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                            <span id="latexSubmitText">Déposer le rapport</span>
+                        </button>
+                    </div>
+
+                    <!-- PANEL: CHALLENGE YOUR MATE (visible quand l'exercice Challenge Your Mate est sélectionné) -->
+                    <div id="challengeMatePanel" class="hidden glass-panel rounded-2xl p-6 border border-rose-800/40 shadow-xl space-y-5">
+                        
+                        <!-- En-tête / Badge d'état de la Session Enseignant -->
+                        <div class="p-4 rounded-xl bg-rose-950/30 border border-rose-800/40 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center border border-rose-500/20">
+                                    <i data-lucide="swords" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <div class="text-xs font-bold text-white uppercase tracking-wider">Session Enseignant</div>
+                                    <div id="challengeSessionStateLabel" class="text-xs text-rose-300 font-medium">En attente du lancement...</div>
+                                </div>
+                            </div>
+                            <div id="challengeSessionIndicator" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+                                <span class="w-2 h-2 rounded-full bg-slate-500"></span> Inactif
+                            </div>
+                        </div>
+
+                        <!-- 1. DÉPÔT DES QUESTIONS & RÉPONSES DE L'ÉTUDIANT -->
+                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                                    <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 text-[11px] flex items-center justify-center font-bold">1</span>
+                                    Vos Questions & Réponses (JSON)
+                                </h4>
+                                <button type="button" id="challengeDownloadTemplateBtn" class="text-[11px] text-rose-400 hover:text-rose-300 underline flex items-center gap-1">
+                                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                                    <span>Modèle .json</span>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                Téléversez un fichier JSON contenant les questions que vous posez à vos camarades (avec options et bonne réponse).
+                            </p>
+
+                            <!-- Dropzone Questions JSON -->
+                            <div id="challengeQuestionsDropzone" class="border-2 border-dashed border-rose-900/40 hover:border-rose-500/60 rounded-xl p-4 text-center cursor-pointer transition-all bg-slate-950/40 relative group">
+                                <input type="file" id="challengeQuestionsFileInput" class="hidden" accept=".json">
+                                
+                                <div id="challengeQuestionsDropEmpty" class="space-y-1.5">
+                                    <div class="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                                        <i data-lucide="file-json" class="w-4 h-4"></i>
+                                    </div>
+                                    <div class="text-xs font-medium text-slate-200">Glissez votre fichier <code class="text-rose-300">.json</code> ou <span class="text-rose-400 underline">parcourez</span></div>
+                                    <div class="text-[10px] text-slate-500">Doit contenir un tableau "questions" avec question, options et correct</div>
+                                </div>
+
+                                <div id="challengeQuestionsDropPreview" class="hidden flex items-center justify-between bg-slate-900 border border-rose-500/40 rounded-lg p-2.5 text-left">
+                                    <div class="flex items-center space-x-2.5 overflow-hidden">
+                                        <div class="w-8 h-8 rounded bg-rose-600/20 text-rose-400 flex items-center justify-center flex-shrink-0">
+                                            <i data-lucide="file-code" class="w-4 h-4"></i>
+                                        </div>
+                                        <div class="overflow-hidden">
+                                            <p id="challengePreviewFileName" class="text-xs font-semibold text-white truncate">questions.json</p>
+                                            <p id="challengePreviewCount" class="text-[10px] text-rose-300 font-medium">0 question détectée</p>
+                                        </div>
+                                    </div>
+                                    <button type="button" id="challengeRemoveFileBtn" class="p-1 text-slate-400 hover:text-red-400 rounded">
+                                        <i data-lucide="x" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Alerte pour l'upload questions -->
+                            <div id="challengeQuestionsAlert" class="hidden p-2.5 rounded-xl text-xs"></div>
+
+                            <!-- Bouton Sauvegarder Questions -->
+                            <button type="button" id="uploadChallengeQuestionsBtn" disabled class="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs shadow-lg shadow-rose-600/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer">
+                                <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                                <span id="uploadChallengeQuestionsText">Téléverser mes questions</span>
+                            </button>
+
+                            <!-- Statut des questions déjà enregistrées dans Supabase -->
+                            <div id="challengeUploadedQuestionsStatus" class="hidden p-3 rounded-xl bg-rose-950/40 border border-rose-700/40 text-xs text-rose-200 flex items-start gap-2.5">
+                                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5"></i>
+                                <div class="flex-1">
+                                    <div class="font-semibold text-white" id="challengeUploadedTitle">Vos questions sont enregistrées !</div>
+                                    <div class="text-[11px] text-slate-300 mt-0.5" id="challengeUploadedDetails">3 questions prêtes pour vos camarades.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. ACCÈS AU QCM DES QUESTIONS DES PAIRS -->
+                        <div class="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                            <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                                <span class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 text-[11px] flex items-center justify-center font-bold">2</span>
+                                Répondre aux questions de vos camarades
+                            </h4>
+                            <p class="text-xs text-slate-400">
+                                Une fois la session lancée par l'enseignant, accédez au QCM regroupant les questions créées par vos pairs (vos propres questions sont automatiquement exclues).
+                            </p>
+
+                            <!-- Infos questions pairs -->
+                            <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs flex items-center justify-between">
+                                <span class="text-slate-400 flex items-center gap-1.5">
+                                    <i data-lucide="users" class="w-4 h-4 text-rose-400"></i>
+                                    Questions disponibles des pairs :
+                                </span>
+                                <span id="challengePeerQuestionsCountBadge" class="font-bold text-rose-300 font-mono">0</span>
+                            </div>
+
+                            <!-- Bouton Lance le Challenge -->
+                            <button type="button" id="startChallengeQuizBtn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-pink-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all flex items-center justify-center gap-2.5 cursor-pointer">
+                                <i data-lucide="rocket" class="w-5 h-5 animate-bounce"></i>
+                                <span id="startChallengeBtnText">🚀 Lance le Challenge</span>
+                            </button>
+
+                            <!-- Résultat / Note affichée dès la fin -->
+                            <div id="challengeResultCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-slate-900 to-rose-950/60 border border-rose-500/40 text-center space-y-2">
+                                <div class="text-[10px] uppercase tracking-wider text-rose-300 font-semibold" id="challengeResultCardTitle">Votre Note au Challenge</div>
+                                <div class="text-3xl font-black font-display text-white" id="challengeFinalGradeDisplay">-- / 20</div>
+                                <div class="text-xs text-slate-300" id="challengeFinalGradeDetails">--</div>
+                                <button type="button" id="viewChallengeAnswersBtn" class="text-xs text-rose-400 hover:text-rose-300 underline font-medium">
+                                    Voir le détail des réponses
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                    </div>
+
+                </div>
+
+                <!-- COLONNE DROITE : HISTORIQUE DES SOUMISSIONS & TENTATIVES (7 cols) -->
+                <div class="lg:col-span-7 space-y-6">
+                    <div class="glass-panel rounded-2xl p-6 border border-slate-800 shadow-xl space-y-5">
+                        
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                    <i data-lucide="history" class="w-5 h-5 text-indigo-400"></i>
+                                    Historique de vos Soumissions
+                                </h3>
+                                <p class="text-xs text-slate-400">Vos 3 tentatives sont archivées, la meilleure note est retenue</p>
+                            </div>
+                            <button id="refreshSubmissionsBtn" title="Actualiser" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-colors">
+                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+
+                        <!-- Filtre d'exercice pour l'historique -->
+                        <div class="flex items-center gap-2 overflow-x-auto pb-1" id="historyFilterTabs">
+                            <button data-filter="all" class="px-3 py-1 rounded-lg text-xs font-semibold bg-brand-600 text-white shadow">
+                                Tous les devoirs
+                            </button>
+                            <button data-filter="Optimizer" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 hover:text-white border border-slate-800">
+                                Optimizer
+                            </button>
+                            <button data-filter="CNN Challenger" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 hover:text-white border border-slate-800">
+                                CNN Challenger
+                            </button>
+                            <button data-filter="LSTM vs RNN (TikZ &amp; Théorie)" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 hover:text-white border border-emerald-800/60">
+                                LSTM vs RNN
+                            </button>
+                            <button data-filter="QCM : Modèles Autorégressifs (AR LLMs)" class="px-3 py-1 rounded-lg text-xs font-semibold bg-slate-900 text-slate-400 hover:text-white border border-amber-800/60">
+                                QCM AR LLMs
+                            </button>
+                        </div>
+
+                        <!-- LEADERBOARD CNN CHALLENGER (visible uniquement quand CNN sélectionné) -->
+                        <div id="cnnLeaderboardPanel" class="hidden glass-panel rounded-2xl p-6 border border-purple-800/40 shadow-xl space-y-4 mt-6">
+                            <div class="flex items-center justify-between">
+                                <h3 class="font-display font-bold text-lg text-white flex items-center gap-2">
+                                    <i data-lucide="trophy" class="w-5 h-5 text-purple-400"></i>
+                                    Leaderboard CNN Challenger
+                                </h3>
+                                <button id="refreshLeaderboardBtn" title="Actualiser le classement" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-purple-700 transition-colors">
+                                    <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                Classement publié par l'enseignant, basé sur la <strong>meilleure accuracy CIFAR-10</strong> de chaque participant. Votre position est mise en évidence.
+                            </p>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs">
+                                    <thead>
+                                        <tr class="border-b border-purple-800/40 text-slate-400 font-semibold uppercase tracking-wider">
+                                            <th class="pb-3 px-2 w-10">#</th>
+                                            <th class="pb-3 px-2">Participant</th>
+                                            <th class="pb-3 px-2 text-center">Accuracy</th>
+                                            <th class="pb-3 px-2 text-center">Note</th>
+                                            <th class="pb-3 px-2 text-right">Tentatives</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaderboardTableBody" class="divide-y divide-slate-800/40 font-medium">
+                                        <tr>
+                                            <td colspan="5" class="py-8 text-center text-slate-500">
+                                                <i data-lucide="loader" class="w-6 h-6 mx-auto mb-2 text-slate-600 animate-spin"></i>
+                                                Chargement du classement...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Tableau des Soumissions -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider">
+                                        <th class="pb-3 px-2">Exercice & Tentative</th>
+                                        <th class="pb-3 px-2">Fichier</th>
+                                        <th class="pb-3 px-2">Statut</th>
+                                        <th class="pb-3 px-2 text-right">Note</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="submissionsTableBody" class="divide-y divide-slate-800/60 font-medium">
+                                    <tr id="emptySubmissionsRow">
+                                        <td colspan="4" class="py-12 text-center text-slate-500">
+                                            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 text-slate-600"></i>
+                                            Aucun devoir soumis pour le moment.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© EdTech CodeLab • Plateforme d'Évaluation GenAI</span>
+            <span>Hébergé sur GitHub Pages & Sécurisé par Supabase RLS</span>
+        </div>
+    </footer>
+
+    <!-- MODAL: QCM CHALLENGE YOUR MATE -->
+    <div id="peerQuizModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-3xl rounded-2xl border border-rose-800/50 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+            
+            <!-- Modal Header -->
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center border border-rose-500/30">
+                        <i data-lucide="swords" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-display font-bold text-base text-white">Challenge Your Mate — QCM des Pairs</h3>
+                        <p class="text-xs text-rose-300">Questions conçues par vos camarades de classe</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="peerQuizSessionIndicator" class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> En direct
+                    </span>
+                    <button type="button" id="closePeerQuizModalBtn" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Warning Enseignant -->
+            <div id="peerQuizTeacherAlert" class="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0 text-amber-400"></i>
+                <span>Session contrôlée par l'enseignant : si l'enseignant arrête le challenge, vos réponses seront automatiquement validées et votre note s'affichera immédiatement.</span>
+            </div>
+
+            <!-- Modal Body (Questions Container) -->
+            <div id="peerQuizBody" class="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+                <div id="peerQuizQuestionsList" class="space-y-6">
+                    <!-- Rempli dynamiquement -->
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div id="peerQuizFooter" class="px-6 py-4 border-t border-slate-800 bg-slate-950/70 flex items-center justify-between">
+                <div class="text-xs text-slate-400">
+                    Progression : <span id="peerQuizAnsweredCount" class="font-bold text-white font-mono">0</span> / <span id="peerQuizTotalCount" class="font-bold text-white font-mono">0</span> répondues
+                </div>
+                <button type="button" id="submitPeerQuizBtn" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center gap-2 cursor-pointer">
+                    <i data-lucide="check-circle" class="w-4 h-4"></i>
+                    <span>Valider et Soumettre</span>
+                </button>
+            </div>
+
+            <!-- Modal Review Screen (Affiché après soumission ou après arrêt par l'enseignant) -->
+            <div id="peerQuizReviewScreen" class="hidden p-6 overflow-y-auto max-h-[80vh] space-y-6">
+                <!-- Rempli avec le récapitulatif détaillé et la note -->
+            </div>
+
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="fixed bottom-6 right-6 z-50 flex flex-col space-y-3 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- Scripts de l'application -->
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -232,6 +232,54 @@ window.SUPABASE_CONFIG = {
                             Q10: "B"
                         }
                     }, null, 2)
+                },
+                {
+                    id: "genai-challenge-mate",
+                    title: "Challenge Your Mate",
+                    course: "GenAI",
+                    maxAttempts: 1,
+                    acceptedTypes: [".json"],
+                    typeLabel: "Challenge Peer-to-Peer (QCM)",
+                    badgeColor: "rose",
+                    icon: "swords",
+                    isPeerChallenge: true,
+                    shortDescription: "Téléversez vos questions, relevez le défi de vos camarades !",
+                    fullDescription: "<div class='text-xs space-y-1.5'>" +
+                        "<div><strong>Challenge Your Mate :</strong> <span class='px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold'>QCM Peer-to-Peer</span></div>" +
+                        "<div>1. <strong>Téléversez</strong> vos questions au format JSON (questions + réponses correctes).</div>" +
+                        "<div>2. Attendez que l'enseignant <strong>lance le challenge</strong>.</div>" +
+                        "<div>3. Cliquez sur <strong>« Lance le Challenge »</strong> pour répondre aux questions de vos camarades.</div>" +
+                        "<div class='p-2 rounded-lg bg-slate-900 border border-slate-700 font-mono text-[11px] text-rose-300 space-y-0.5'>" +
+                        "<div>🎯 <strong>Notation :</strong> Score = (Bonnes réponses / Total) × 20</div>" +
+                        "<div>⏱️ <strong>Durée :</strong> Contrôlée par l'enseignant (start/stop).</div>" +
+                        "<div>⚠️ <strong>Auto-soumission :</strong> Si l'enseignant arrête le challenge, vos réponses sont soumises automatiquement.</div>" +
+                        "</div>" +
+                        "</div>",
+                    templateFilename: "challenge_questions_template.json",
+                    templateContent: JSON.stringify({
+                        questions: [
+                            {
+                                question: "Quelle est la complexité de l'algorithme de tri rapide en moyenne ?",
+                                options: [
+                                    { key: "A", text: "O(n)" },
+                                    { key: "B", text: "O(n log n)" },
+                                    { key: "C", text: "O(n²)" },
+                                    { key: "D", text: "O(log n)" }
+                                ],
+                                correct: "B"
+                            },
+                            {
+                                question: "Quel optimiseur utilise le momentum et l'estimation adaptative du taux d'apprentissage ?",
+                                options: [
+                                    { key: "A", text: "SGD" },
+                                    { key: "B", text: "RMSProp" },
+                                    { key: "C", text: "Adam" },
+                                    { key: "D", text: "Adagrad" }
+                                ],
+                                correct: "C"
+                            }
+                        ]
+                    }, null, 2)
                 }
             ]
         }
