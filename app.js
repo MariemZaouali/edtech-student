@@ -1927,7 +1927,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const { data, error } = await supabase
                 .from('challenge_questions')
                 .select('questions, question_count')
-                .neq('student_id', currentUser.id);
+                .neq('student_email', currentUser.email);
 
             if (error) throw error;
             let total = 0;
