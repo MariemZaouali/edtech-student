@@ -1788,6 +1788,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let challengeParsedQuestions = [];
     let challengeMyQuestionsRecord = null;
     let challengePeerQuestions = [];
+    let challengeAllSubmissions = [];
+    let challengeBestSubmission = null;
+    let challengeLatestSubmission = null;
     let challengeMySubmission = null;
     let peerQuizUserAnswers = {};
     let isPeerQuizActive = false;
@@ -1811,15 +1814,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 event: '*',
                 schema: 'public',
                 table: 'challenge_sessions'
-            }, (payload) => {
+            }, async (payload) => {
                 const newSession = payload.new;
                 if (!newSession) return;
                 const prevStatus = challengeSession ? challengeSession.status : null;
+                const prevId = challengeSession ? challengeSession.id : null;
                 challengeSession = newSession;
+
+                // Recharger les soumissions pour être à jour avec la nouvelle session
+                await fetchMyChallengeSubmission();
                 updateChallengeSessionUI();
 
-                if (newSession.status === 'active' && prevStatus !== 'active') {
-                    showToast('🚀 L\'enseignant a lancé le Challenge Your Mate !', 'success');
+                if (newSession.status === 'active' && (prevStatus !== 'active' || newSession.id !== prevId)) {
+                    showToast('🚀 L\'enseignant a lancé une nouvelle session de Challenge ! Vous pouvez participer dès maintenant.', 'success');
                 } else if (newSession.status === 'stopped') {
                     showToast('🛑 L\'enseignant a arrêté le Challenge.', 'warning');
                     if (isPeerQuizActive) {
@@ -1854,6 +1861,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateChallengeSessionUI() {
         if (!challengeSession) return;
         const status = challengeSession.status || 'inactive';
+        const totalAttempts = challengeAllSubmissions.length;
+        const currentSessionId = challengeSession.id;
+        const hasSubmittedInCurrentSession = challengeAllSubmissions.some(s => s.session_id === currentSessionId);
 
         if (challengeSessionIndicator) {
             if (status === 'active') {
@@ -1870,7 +1880,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (challengeSessionStateLabel) {
             if (status === 'active') {
-                challengeSessionStateLabel.textContent = 'Session en direct ! L\'enseignant a lancé le challenge.';
+                challengeSessionStateLabel.textContent = totalAttempts > 0 
+                    ? 'Nouvelle session en direct ! Vous pouvez participer pour tenter d\'améliorer votre note retenue.'
+                    : 'Session en direct ! L\'enseignant a lancé le challenge.';
                 challengeSessionStateLabel.className = 'text-xs text-emerald-400 font-semibold';
             } else if (status === 'stopped') {
                 challengeSessionStateLabel.textContent = 'Session clôturée par l\'enseignant.';
@@ -1883,14 +1895,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Mettre à jour l'intitulé du bouton principal
         if (startChallengeBtnText) {
-            if (challengeMySubmission) {
-                startChallengeBtnText.textContent = '📊 Voir mon résultat / mes réponses';
-            } else if (status === 'active') {
-                startChallengeBtnText.textContent = '🚀 Lance le Challenge ! (En direct)';
+            if (status === 'active') {
+                if (hasSubmittedInCurrentSession) {
+                    startChallengeBtnText.textContent = '🔄 Retenter le Challenge (En direct • Meilleure note retenue)';
+                } else if (totalAttempts > 0) {
+                    startChallengeBtnText.textContent = '🚀 Participer à la nouvelle session (En direct)';
+                } else {
+                    startChallengeBtnText.textContent = '🚀 Lance le Challenge ! (En direct)';
+                }
             } else if (status === 'stopped') {
-                startChallengeBtnText.textContent = '🛑 Session terminée';
+                if (totalAttempts > 0) {
+                    startChallengeBtnText.textContent = '🛑 Session terminée • Voir mes réponses';
+                } else {
+                    startChallengeBtnText.textContent = '🛑 Session clôturée par l\'enseignant';
+                }
             } else {
-                startChallengeBtnText.textContent = '⏳ En attente de l\'enseignant...';
+                if (totalAttempts > 0) {
+                    startChallengeBtnText.textContent = '📊 Voir mon résultat / mes réponses';
+                } else {
+                    startChallengeBtnText.textContent = '⏳ En attente de l\'enseignant...';
+                }
             }
         }
     }
@@ -1951,26 +1975,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 .from('challenge_submissions')
                 .select('*')
                 .eq('student_id', currentUser.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
+                .order('submitted_at', { ascending: false });
 
             if (error) throw error;
-            challengeMySubmission = data;
+            challengeAllSubmissions = data || [];
+            challengeLatestSubmission = challengeAllSubmissions[0] || null;
 
-            if (data && data.score !== null && data.score !== undefined) {
+            if (challengeAllSubmissions.length > 0) {
+                // Trouver la meilleure tentative (note retenue = MAX)
+                challengeBestSubmission = challengeAllSubmissions.reduce((best, curr) => {
+                    const bestScore = best && best.score !== null ? parseFloat(best.score) : -1;
+                    const currScore = curr && curr.score !== null ? parseFloat(curr.score) : -1;
+                    return currScore >= bestScore ? curr : best;
+                }, challengeAllSubmissions[0]);
+            } else {
+                challengeBestSubmission = null;
+            }
+
+            challengeMySubmission = challengeBestSubmission || challengeLatestSubmission;
+
+            if (challengeBestSubmission && challengeBestSubmission.score !== null && challengeBestSubmission.score !== undefined) {
+                const bestScoreNum = parseFloat(challengeBestSubmission.score);
+                const latestScoreNum = challengeLatestSubmission ? parseFloat(challengeLatestSubmission.score) : bestScoreNum;
+                const totalAttempts = challengeAllSubmissions.length;
+
                 if (challengeResultCard) challengeResultCard.classList.remove('hidden');
                 if (challengeFinalGradeDisplay) {
-                    challengeFinalGradeDisplay.textContent = `${parseFloat(data.score).toFixed(2)} / 20`;
-                    challengeFinalGradeDisplay.className = `text-3xl font-black font-display ${data.score >= 10 ? 'text-emerald-400' : 'text-rose-400'}`;
+                    challengeFinalGradeDisplay.textContent = `${bestScoreNum.toFixed(2)} / 20`;
+                    challengeFinalGradeDisplay.className = `text-3xl font-black font-display ${bestScoreNum >= 10 ? 'text-emerald-400' : 'text-rose-400'}`;
                 }
                 if (challengeFinalGradeDetails) {
-                    challengeFinalGradeDetails.textContent = `${data.correct_count} / ${data.total_questions} réponses correctes ${data.is_auto_submitted ? '• Auto-soumis à l\'arrêt par l\'enseignant' : '• Soumis manuellement'}`;
+                    let detailsText = `🏆 Note Retenue : ${bestScoreNum.toFixed(2)} / 20 (Note Maximale)`;
+                    if (totalAttempts > 1) {
+                        detailsText += ` • ${totalAttempts} tentatives • Dernière tentative : ${latestScoreNum.toFixed(2)}/20`;
+                    } else {
+                        detailsText += ` • ${challengeBestSubmission.correct_count} / ${challengeBestSubmission.total_questions} réponses correctes`;
+                    }
+                    if (challengeLatestSubmission && challengeLatestSubmission.is_auto_submitted) {
+                        detailsText += ' • Auto-soumis';
+                    }
+                    challengeFinalGradeDetails.textContent = detailsText;
                 }
-                updateChallengeSessionUI();
             } else {
                 if (challengeResultCard) challengeResultCard.classList.add('hidden');
             }
+            updateChallengeSessionUI();
         } catch (e) {
             console.warn('Erreur récupération soumission challenge:', e.message);
         }
@@ -2165,31 +2214,39 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bouton Principal : Lance le Challenge
     if (startChallengeQuizBtn) {
         startChallengeQuizBtn.addEventListener('click', async () => {
-            // Si l'étudiant a déjà une soumission, afficher directement la revue
-            if (challengeMySubmission) {
-                openPeerQuizReview(challengeMySubmission);
-                return;
-            }
-
-            // Vérifier le statut de la session enseignant
-            if (!challengeSession || challengeSession.status !== 'active') {
-                if (challengeSession?.status === 'stopped') {
-                    showToast('🛑 Le challenge a été arrêté par l\'enseignant.', 'warning');
-                } else {
-                    showToast('⏳ L\'enseignant n\'a pas encore lancé la session de challenge. Patientez !', 'warning');
+            // Si la session est active, permettre TOUJOURS de participer (même s'il y a déjà des soumissions) !
+            if (challengeSession && challengeSession.status === 'active') {
+                const currentSessionId = challengeSession.id;
+                const hasSubmittedInCurrentSession = challengeAllSubmissions.some(s => s.session_id === currentSessionId);
+                if (hasSubmittedInCurrentSession) {
+                    if (!confirm("Vous avez déjà soumis une tentative pour cette session. Souhaitez-vous retenter ? Votre meilleure note sera toujours celle conservée !")) {
+                        openPeerQuizReview(challengeLatestSubmission || challengeBestSubmission);
+                        return;
+                    }
                 }
+                await launchLivePeerQuiz();
                 return;
             }
 
-            // Lancer le QCM avec les questions des pairs
-            await launchLivePeerQuiz();
+            // Si la session n'est pas active, mais l'étudiant a déjà une soumission, afficher directement la revue
+            if (challengeBestSubmission || challengeLatestSubmission) {
+                openPeerQuizReview(challengeLatestSubmission || challengeBestSubmission);
+                return;
+            }
+
+            // Session non active et aucune soumission
+            if (challengeSession?.status === 'stopped') {
+                showToast('🛑 Le challenge a été arrêté par l\'enseignant.', 'warning');
+            } else {
+                showToast('⏳ L\'enseignant n\'a pas encore lancé la session de challenge. Patientez !', 'warning');
+            }
         });
     }
 
     if (viewChallengeAnswersBtn) {
         viewChallengeAnswersBtn.addEventListener('click', () => {
-            if (challengeMySubmission) {
-                openPeerQuizReview(challengeMySubmission);
+            if (challengeBestSubmission || challengeLatestSubmission) {
+                openPeerQuizReview(challengeLatestSubmission || challengeBestSubmission);
             }
         });
     }
@@ -2343,11 +2400,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const score = total > 0 ? Number(((correctCount / total) * 20).toFixed(2)) : 0;
+        const currentSessionId = challengeSession?.id || '00000000-0000-0000-0000-000000000001';
 
         const submissionData = {
             student_id: currentUser.id,
             student_email: currentUser.email,
-            session_id: challengeSession?.id || '00000000-0000-0000-0000-000000000001',
+            session_id: currentSessionId,
             answers: peerQuizUserAnswers,
             questions_served: challengePeerQuestions,
             score: score,
@@ -2358,11 +2416,34 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         try {
-            await supabase.from('challenge_submissions').upsert(submissionData, {
-                onConflict: 'student_id,session_id'
-            });
+            // Tenter insert (pour garder toutes les tentatives par session) ou fallback upsert
+            const { error: insErr } = await supabase.from('challenge_submissions').insert(submissionData);
+            if (insErr) {
+                await supabase.from('challenge_submissions').upsert(submissionData, {
+                    onConflict: 'student_id,session_id'
+                });
+            }
+        } catch (e) {
+            console.warn('Erreur insert challenge_submissions, tentative upsert:', e);
+            try {
+                await supabase.from('challenge_submissions').upsert(submissionData, {
+                    onConflict: 'student_id,session_id'
+                });
+            } catch (err2) {
+                console.error('Erreur sauvegarde soumission challenge:', err2);
+            }
+        }
 
-            // Sauvegarder également dans la table submissions générale pour affichage dans l'historique global
+        // Rafraîchir toutes les soumissions pour recalculer la meilleure note retenue
+        await fetchMyChallengeSubmission();
+
+        const allScores = (challengeAllSubmissions || []).map(s => Number(s.score || 0));
+        const maxScore = allScores.length > 0 ? Math.max(...allScores, score) : score;
+        const attemptsCount = Math.max((challengeAllSubmissions || []).length, 1);
+
+        // Sauvegarder également dans la table submissions générale pour affichage dans l'historique global
+        // avec la NOTE RETENUE MAXIMALE
+        try {
             await supabase.from('submissions').insert({
                 student_id: currentUser.id,
                 student_email: currentUser.email,
@@ -2370,29 +2451,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 file_name: "challenge_quiz_answers.json",
                 file_path: `challenge/${currentUser.id}/${Date.now()}.json`,
                 status: "Évalué",
-                grade: score,
-                evaluation_feedback: `Challenge Your Mate : ${correctCount}/${total} bonnes réponses (${score}/20)${isAuto ? ' [Auto-soumis à l\'arrêt par l\'enseignant]' : ''}`,
+                grade: maxScore,
+                evaluation_feedback: `Challenge Your Mate • Note retenue : ${maxScore.toFixed(2)}/20 (Meilleure note sur ${attemptsCount} tentative(s)). Dernière tentative : ${score.toFixed(2)}/20 (${correctCount}/${total} bonnes réponses)${isAuto ? ' [Auto-soumis à l\'arrêt par l\'enseignant]' : ''}`,
                 created_at: new Date().toISOString()
-            }).catch(() => {});
-        } catch (e) {
-            console.error('Erreur sauvegarde soumission challenge:', e);
+            });
+        } catch (subErr) {
+            console.warn('Erreur enregistrement submissions générale:', subErr);
         }
 
-        challengeMySubmission = submissionData;
-
-        // Mise à jour de la carte de résultat principale
-        if (challengeResultCard) challengeResultCard.classList.remove('hidden');
-        if (challengeFinalGradeDisplay) {
-            challengeFinalGradeDisplay.textContent = `${score.toFixed(2)} / 20`;
-            challengeFinalGradeDisplay.className = `text-3xl font-black font-display ${score >= 10 ? 'text-emerald-400' : 'text-rose-400'}`;
-        }
-        if (challengeFinalGradeDetails) {
-            challengeFinalGradeDetails.textContent = `${correctCount} / ${total} réponses correctes ${isAuto ? '• Auto-soumis à l\'arrêt par l\'enseignant' : '• Soumis manuellement'}`;
-        }
-        updateChallengeSessionUI();
-
-        // Afficher l'écran de revue détaillé dans la modal
-        openPeerQuizReview(submissionData);
+        // Afficher l'écran de revue détaillé dans la modal avec la note maximale retenue
+        openPeerQuizReview(submissionData, maxScore, attemptsCount);
         fetchSubmissions();
     }
 
@@ -2409,11 +2477,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function openPeerQuizReview(sub) {
+    function openPeerQuizReview(sub, retainedMaxScore = null, totalAttempts = null) {
         if (!sub) return;
         const questions = sub.questions_served || [];
         const answers = sub.answers || {};
         const score = sub.score !== null ? parseFloat(sub.score).toFixed(2) : '--';
+
+        const maxScore = retainedMaxScore !== null 
+            ? parseFloat(retainedMaxScore).toFixed(2)
+            : (challengeBestSubmission && challengeBestSubmission.score !== null ? parseFloat(challengeBestSubmission.score).toFixed(2) : score);
+
+        const attempts = totalAttempts !== null ? totalAttempts : (challengeAllSubmissions?.length || 1);
+        const isCurrentBest = parseFloat(score) >= parseFloat(maxScore);
+        const isSessionActive = challengeSession && challengeSession.status === 'active';
 
         if (peerQuizBody) peerQuizBody.classList.add('hidden');
         if (peerQuizFooter) peerQuizFooter.classList.add('hidden');
@@ -2423,25 +2499,47 @@ document.addEventListener('DOMContentLoaded', () => {
             peerQuizReviewScreen.classList.remove('hidden');
             peerQuizReviewScreen.innerHTML = `
                 <div class="space-y-6">
-                    <!-- Bannière Score -->
-                    <div class="p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-rose-950/70 border border-rose-500/40 text-center space-y-2 shadow-xl">
+                    <!-- Bannière Score Retenu (Max) vs Tentative -->
+                    <div class="p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-rose-950/70 border border-rose-500/40 text-center space-y-3 shadow-xl">
                         <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${sub.is_auto_submitted ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">
                             <i data-lucide="${sub.is_auto_submitted ? 'clock' : 'check-circle'}" class="w-4 h-4"></i>
-                            ${sub.is_auto_submitted ? 'Challenge arrêté par l\'enseignant • Note finale calculée automatiquement' : 'Challenge validé par l\'étudiant'}
+                            ${sub.is_auto_submitted ? 'Challenge arrêté par l\'enseignant • Auto-soumis' : 'Tentative validée'}
                         </div>
-                        <div class="text-4xl font-black font-display ${sub.score >= 10 ? 'text-emerald-400' : 'text-rose-400'}">
-                            ${score} <span class="text-lg text-slate-500">/ 20</span>
+
+                        <!-- NOTE RETENUE (MAX) MISE EN AVANT -->
+                        <div class="p-4 rounded-xl bg-slate-950/80 border border-rose-500/30 space-y-1">
+                            <div class="text-[11px] uppercase tracking-wider text-amber-400 font-bold flex items-center justify-center gap-1.5">
+                                <i data-lucide="trophy" class="w-4 h-4 text-amber-400"></i>
+                                <span>Note Retenue pour l'Évaluation (Maximale)</span>
+                            </div>
+                            <div class="text-4xl font-black font-display text-emerald-400">
+                                ${maxScore} <span class="text-lg text-slate-500">/ 20</span>
+                            </div>
+                            <div class="text-[11px] text-slate-400">
+                                ${isCurrentBest 
+                                    ? '🎉 Cette tentative est votre meilleure note !' 
+                                    : `ℹ️ Note de cette tentative : <strong>${score} / 20</strong> (votre meilleure note de ${maxScore}/20 est conservée)`}
+                                • <strong>${attempts} tentative(s) au total</strong>
+                            </div>
                         </div>
+
                         <p class="text-xs text-slate-300">
-                            <strong>${sub.correct_count}</strong> bonne(s) réponse(s) sur <strong>${sub.total_questions}</strong> questions proposées par vos camarades.
+                            <strong>${sub.correct_count}</strong> bonne(s) réponse(s) sur <strong>${sub.total_questions}</strong> questions dans cette tentative.
                         </p>
+
+                        ${isSessionActive ? `
+                            <button type="button" id="retryChallengeFromReviewBtn" class="mt-2 w-full py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-bold text-xs shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all">
+                                <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                                <span>Session en cours : Retenter le Challenge</span>
+                            </button>
+                        ` : ''}
                     </div>
 
                     <!-- Liste détaillée des réponses -->
                     <div class="space-y-4">
                         <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
                             <i data-lucide="list-checks" class="w-4 h-4 text-rose-400"></i>
-                            Détail de vos réponses
+                            Détail de vos réponses (Tentative affichée)
                         </h4>
                         ${questions.map((q, idx) => {
                             const userAns = answers[q.id];
@@ -2474,6 +2572,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
             if (window.lucide) lucide.createIcons();
+
+            const retryBtn = document.getElementById('retryChallengeFromReviewBtn');
+            if (retryBtn) {
+                retryBtn.addEventListener('click', async () => {
+                    if (peerQuizModal) {
+                        peerQuizModal.classList.add('hidden');
+                        peerQuizModal.classList.remove('flex');
+                    }
+                    await launchLivePeerQuiz();
+                });
+            }
         }
 
         if (peerQuizModal) {

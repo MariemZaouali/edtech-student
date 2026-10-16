@@ -711,13 +711,19 @@
                             </button>
 
                             <!-- Résultat / Note affichée dès la fin -->
-                            <div id="challengeResultCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-slate-900 to-rose-950/60 border border-rose-500/40 text-center space-y-2">
-                                <div class="text-[10px] uppercase tracking-wider text-rose-300 font-semibold" id="challengeResultCardTitle">Votre Note au Challenge</div>
-                                <div class="text-3xl font-black font-display text-white" id="challengeFinalGradeDisplay">-- / 20</div>
-                                <div class="text-xs text-slate-300" id="challengeFinalGradeDetails">--</div>
-                                <button type="button" id="viewChallengeAnswersBtn" class="text-xs text-rose-400 hover:text-rose-300 underline font-medium">
-                                    Voir le détail des réponses
-                                </button>
+                            <div id="challengeResultCard" class="hidden p-4 rounded-xl bg-gradient-to-br from-slate-900 via-rose-950/40 to-slate-900 border border-rose-500/40 text-center space-y-2.5 shadow-xl">
+                                <div class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[10px] uppercase tracking-wider text-amber-300 font-bold" id="challengeResultCardTitle">
+                                    <i data-lucide="trophy" class="w-3.5 h-3.5 text-amber-400"></i>
+                                    <span>Note Retenue (Maximale)</span>
+                                </div>
+                                <div class="text-3xl font-black font-display text-emerald-400" id="challengeFinalGradeDisplay">-- / 20</div>
+                                <div class="text-xs text-slate-300 leading-relaxed" id="challengeFinalGradeDetails">--</div>
+                                <div class="pt-1 flex items-center justify-center gap-4">
+                                    <button type="button" id="viewChallengeAnswersBtn" class="text-xs text-rose-400 hover:text-rose-300 underline font-medium flex items-center gap-1 cursor-pointer">
+                                        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                                        <span>Voir le détail de mes réponses</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
