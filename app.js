@@ -1197,10 +1197,13 @@ document.addEventListener('DOMContentLoaded', () => {
             groups[s.assignment_name].push(s);
         });
 
-        // Déterminer le max grade par exercice
+        // Déterminer le max grade par exercice (en excluant les devoirs rejetés / non acceptés)
         const bestGradeMap = {};
         Object.keys(groups).forEach(name => {
-            const graded = groups[name].filter(s => s.grade !== null && s.grade !== undefined);
+            const graded = groups[name].filter(s => {
+                const isRej = s.status === 'Non accepté' || s.status === 'Rejeté' || (s.metadata && (s.metadata.rejected || s.metadata.is_rejected || s.metadata.status === 'Non accepté'));
+                return !isRej && s.grade !== null && s.grade !== undefined;
+            });
             if (graded.length > 0) {
                 bestGradeMap[name] = Math.max(...graded.map(s => parseFloat(s.grade)));
             }
@@ -1208,8 +1211,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Assigner le flag isBest
         subs.forEach(s => {
+            const isRej = s.status === 'Non accepté' || s.status === 'Rejeté' || (s.metadata && (s.metadata.rejected || s.metadata.is_rejected || s.metadata.status === 'Non accepté'));
             const maxG = bestGradeMap[s.assignment_name];
-            s.isBest = (maxG !== undefined && s.grade !== null && parseFloat(s.grade) === maxG);
+            s.isBest = (!isRej && maxG !== undefined && s.grade !== null && parseFloat(s.grade) === maxG);
         });
 
         renderSubmissionsTable(visible);
@@ -1237,8 +1241,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         submissionsTableBody.innerHTML = filtered.map(sub => {
-            const isGraded = sub.status === 'Évalué' && sub.grade !== null;
-            const gradeDisplay = isGraded ? `${parseFloat(sub.grade).toFixed(2)}/20` : '--/20';
+            const isRejected = sub.status === 'Non accepté' || sub.status === 'Rejeté' || (sub.metadata && (sub.metadata.rejected || sub.metadata.is_rejected || sub.metadata.status === 'Non accepté'));
+            const rejectionReason = (sub.metadata && (sub.metadata.rejection_reason || sub.metadata.reason)) || sub.rejection_reason || "Tentative non acceptée par l'enseignant.";
+
+            const isGraded = !isRejected && sub.status === 'Évalué' && sub.grade !== null;
+            const gradeDisplay = isRejected ? 'Non validé' : (isGraded ? `${parseFloat(sub.grade).toFixed(2)}/20` : '--/20');
             const dateStr = new Date(sub.created_at).toLocaleDateString('fr-FR', {
                 day: '2-digit',
                 month: 'short',
@@ -1247,11 +1254,11 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             // Badge de tentative
-            const attemptNum = sub.attempt_number || 1;
+            const attemptNum = sub.attempt_number || sub.computed_attempt || 1;
             const attemptBadge = `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">Tentative ${attemptNum}/3</span>`;
 
             // Badge Meilleure Note
-            const bestBadge = sub.isBest ? `
+            const bestBadge = (!isRejected && sub.isBest) ? `
                 <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold badge-best ml-1.5 shadow-sm">
                     <i data-lucide="trophy" class="w-3 h-3 text-amber-400"></i>
                     Meilleure note retenue
@@ -1260,35 +1267,54 @@ document.addEventListener('DOMContentLoaded', () => {
             // Icone Fichier
             let fileIcon = "file-code";
             let fileColor = "text-indigo-400";
-            if (sub.file_type === 'json' || sub.file_name.endsWith('.json')) {
+            if (sub.file_type === 'json' || (sub.file_name && sub.file_name.endsWith('.json'))) {
                 fileIcon = "file-json";
                 fileColor = "text-amber-400";
-            } else if (sub.file_type === 'csv' || sub.file_name.endsWith('.csv')) {
+            } else if (sub.file_type === 'csv' || (sub.file_name && sub.file_name.endsWith('.csv'))) {
                 fileIcon = "file-spreadsheet";
                 fileColor = "text-emerald-400";
             }
 
             // Statut
-            const statusBadge = isGraded
-                ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            let statusBadge = '';
+            if (isRejected) {
+                statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                     <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Non accepté
+                   </span>`;
+            } else if (isGraded) {
+                statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Évalué
-                   </span>`
-                : `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                   </span>`;
+            } else {
+                statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span> En cours
                    </span>`;
+            }
 
             // Note badge (Masquée pour CNN Challenger)
             let gradeBadge = '';
-            if (sub.assignment_name === 'CNN Challenger') {
+            if (sub.assignment_name === 'CNN Challenger' && !isRejected) {
                 gradeBadge = `<span class="text-xs font-medium text-purple-400 px-2 py-1 rounded-lg bg-purple-900/30 border border-purple-800 flex items-center justify-center gap-1"><i data-lucide="trophy" class="w-3 h-3"></i> Leaderboard</span>`;
+            } else if (isRejected) {
+                gradeBadge = `<span class="text-xs font-semibold text-rose-400 px-2.5 py-1 rounded-lg bg-rose-950/40 border border-rose-800/40">Refusé</span>`;
             } else {
                 gradeBadge = isGraded
                     ? `<span class="text-sm font-bold font-display px-2.5 py-1 rounded-lg ${sub.isBest ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}">${gradeDisplay}</span>`
                     : `<span class="text-xs font-medium text-slate-500 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800">${gradeDisplay}</span>`;
             }
 
+            // Alerte de rejet
+            const rejectionNoticeHtml = isRejected
+                ? `<div class="mt-2 text-[11px] text-rose-300 bg-rose-950/40 p-2.5 rounded-lg border border-rose-800/50 space-y-1">
+                     <div class="font-bold text-rose-400 flex items-center gap-1.5">
+                        <i data-lucide="alert-octagon" class="w-3.5 h-3.5 text-rose-400"></i> Tentative non acceptée :
+                     </div>
+                     <div class="text-rose-200 text-[11px] font-medium whitespace-pre-wrap">${escapeHtml(rejectionReason)}</div>
+                   </div>`
+                : '';
+
             // Rapport / Feedback professeur
-            const feedbackHtml = sub.feedback
+            const feedbackHtml = (sub.feedback && !isRejected)
                 ? `<div class="mt-2 text-[11px] text-slate-300 bg-slate-900/90 p-2.5 rounded-lg border border-slate-800 space-y-1">
                      <div class="font-semibold text-brand-300 flex items-center gap-1">
                         <i data-lucide="message-square" class="w-3 h-3"></i> Rapport d'Évaluation :
@@ -1298,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 : '';
 
             return `
-                <tr class="hover:bg-slate-900/50 transition-colors group">
+                <tr class="hover:bg-slate-900/50 transition-colors group ${isRejected ? 'bg-rose-950/10' : ''}">
                     <td class="py-3.5 px-2 align-top">
                         <div class="flex items-center flex-wrap gap-1">
                             <span class="font-bold text-slate-100 text-xs">${escapeHtml(sub.assignment_name)}</span>
@@ -1306,6 +1332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${bestBadge}
                         </div>
                         <div class="text-[10px] text-slate-500 mt-1">${dateStr} • Matière : ${sub.course || 'GenAI'}</div>
+                        ${rejectionNoticeHtml}
                         ${feedbackHtml}
                     </td>
                     <td class="py-3.5 px-2 align-top">
@@ -1342,9 +1369,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!statSubmittedCount || !statAverageGrade) return;
         statSubmittedCount.textContent = submissions.length;
 
-        // Moyenne des MEILLEURES notes par exercice (hors CNN Challenger)
+        // Moyenne des MEILLEURES notes par exercice (hors CNN Challenger et hors devoirs rejetés)
         const groups = {};
         submissions.forEach(s => {
+            const isRej = s.status === 'Non accepté' || s.status === 'Rejeté' || (s.metadata && (s.metadata.rejected || s.metadata.is_rejected || s.metadata.status === 'Non accepté'));
+            if (isRej) return;
             if (s.assignment_name === "CNN Challenger") return; // Ignorer pour la moyenne
             if (!groups[s.assignment_name]) groups[s.assignment_name] = [];
             if (s.grade !== null && s.grade !== undefined) {
@@ -1796,6 +1825,47 @@ document.addEventListener('DOMContentLoaded', () => {
     let isPeerQuizActive = false;
     let challengeRealtimeSub = null;
 
+    // Helper : Comparaison robuste de réponse (supporte 'A' <-> 0, 'B' <-> 1, ou lettres directes)
+    function isPeerQuizAnswerCorrect(userAns, correctAns, options) {
+        if (!userAns || correctAns === undefined || correctAns === null) return false;
+        const u = String(userAns).trim().toUpperCase();
+        const c = String(correctAns).trim().toUpperCase();
+
+        if (u === c) return true;
+
+        // Comparaison Lettre (A, B...) vs Chiffre (0, 1...) 0-based
+        if (/^[A-Z]$/.test(u) && /^\d+$/.test(c)) {
+            const expectedIdx = parseInt(c, 10);
+            if (u.charCodeAt(0) - 65 === expectedIdx) return true;
+            // 1-based fallback
+            if (expectedIdx >= 1 && u.charCodeAt(0) - 64 === expectedIdx) {
+                if (options && options.length === expectedIdx) return true;
+            }
+        }
+
+        // Comparaison Chiffre vs Lettre
+        if (/^\d+$/.test(u) && /^[A-Z]$/.test(c)) {
+            const userIdx = parseInt(u, 10);
+            if (userIdx === c.charCodeAt(0) - 65) return true;
+            if (userIdx >= 1 && userIdx === c.charCodeAt(0) - 64) return true;
+        }
+
+        // Comparaison via le tableau d'options (si options renseigné)
+        if (Array.isArray(options)) {
+            for (let idx = 0; idx < options.length; idx++) {
+                const opt = options[idx];
+                const optKey = (typeof opt === 'object' && opt !== null ? (opt.key || String.fromCharCode(65 + idx)) : String.fromCharCode(65 + idx)).toUpperCase();
+                const optText = (typeof opt === 'object' && opt !== null ? (opt.text || '') : String(opt)).toLowerCase().trim();
+
+                const uMatches = (u === optKey) || (u.toLowerCase() === optText) || (u === String(idx));
+                const cMatches = (c === optKey) || (c.toLowerCase() === optText) || (c === String(idx));
+                if (uMatches && cMatches) return true;
+            }
+        }
+
+        return false;
+    }
+
     async function initChallengeMate() {
         if (!supabase || !currentUser) return;
         setupChallengeRealtime();
@@ -2049,7 +2119,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
 
-            const correct = (item.correct || 'A').toString().trim().toUpperCase();
+            // Normaliser la réponse attendue : convertir index numérique (0, 1...) en lettre clé correspondante
+            let correct = 'A';
+            if (item.correct !== undefined && item.correct !== null) {
+                const rawC = String(item.correct).trim().toUpperCase();
+                if (/^\d+$/.test(rawC)) {
+                    const idxNum = parseInt(rawC, 10);
+                    if (idxNum >= 0 && idxNum < options.length) {
+                        correct = options[idxNum].key;
+                    } else if (idxNum >= 1 && idxNum <= options.length) {
+                        correct = options[idxNum - 1].key;
+                    } else {
+                        correct = rawC;
+                    }
+                } else {
+                    correct = rawC;
+                }
+            }
+
             return {
                 question: qText,
                 options: options,
@@ -2283,12 +2370,30 @@ document.addEventListener('DOMContentLoaded', () => {
                             opts = Object.keys(q.options).map(k => ({ key: k.toUpperCase(), text: q.options[k] }));
                         }
 
+                        // Normalisation de la réponse attendue (chiffre -> lettre correspondante)
+                        let correctVal = 'A';
+                        if (q.correct !== undefined && q.correct !== null) {
+                            const rawC = String(q.correct).trim().toUpperCase();
+                            if (/^\d+$/.test(rawC)) {
+                                const idxNum = parseInt(rawC, 10);
+                                if (idxNum >= 0 && idxNum < opts.length) {
+                                    correctVal = opts[idxNum].key;
+                                } else if (idxNum >= 1 && idxNum <= opts.length) {
+                                    correctVal = opts[idxNum - 1].key;
+                                } else {
+                                    correctVal = rawC;
+                                }
+                            } else {
+                                correctVal = rawC;
+                            }
+                        }
+
                         challengePeerQuestions.push({
                             id: `${row.student_id}_${idx}`,
                             author: authorName,
                             question: q.question,
                             options: opts,
-                            correct: (q.correct || 'A').toString().trim().toUpperCase()
+                            correct: correctVal
                         });
                     });
                 }
@@ -2393,8 +2498,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const total = challengePeerQuestions.length;
 
         challengePeerQuestions.forEach(q => {
-            const userAns = (peerQuizUserAnswers[q.id] || '').toString().trim().toUpperCase();
-            if (userAns && userAns === q.correct) {
+            const userAns = peerQuizUserAnswers[q.id];
+            if (isPeerQuizAnswerCorrect(userAns, q.correct, q.options)) {
                 correctCount++;
             }
         });
@@ -2543,7 +2648,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         </h4>
                         ${questions.map((q, idx) => {
                             const userAns = answers[q.id];
-                            const isCorrect = userAns === q.correct;
+                            const isCorrect = isPeerQuizAnswerCorrect(userAns, q.correct, q.options);
+
+                            // Formatage lisible de la bonne réponse
+                            let displayCorrect = q.correct || 'A';
+                            if (Array.isArray(q.options) && /^\d+$/.test(String(q.correct))) {
+                                const num = parseInt(q.correct, 10);
+                                if (num >= 0 && num < q.options.length) {
+                                    const o = q.options[num];
+                                    const k = o.key || String.fromCharCode(65 + num);
+                                    displayCorrect = `${k} : ${o.text || ''}`;
+                                }
+                            } else if (Array.isArray(q.options)) {
+                                const foundOpt = q.options.find(o => o.key === q.correct);
+                                if (foundOpt) {
+                                    displayCorrect = `${foundOpt.key} : ${foundOpt.text}`;
+                                }
+                            }
 
                             return `
                                 <div class="p-4 rounded-xl border ${isCorrect ? 'bg-emerald-950/20 border-emerald-800/40' : 'bg-rose-950/20 border-rose-800/40'} space-y-2.5">
@@ -2558,7 +2679,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     </div>
                                     <div class="text-[11px] space-y-1 pt-1">
                                         <div class="text-slate-400">Votre réponse : <strong class="${isCorrect ? 'text-emerald-300' : 'text-rose-300'}">${userAns || 'Aucune'}</strong></div>
-                                        ${!isCorrect ? `<div class="text-slate-400">Bonne réponse attendue : <strong class="text-emerald-400">${q.correct}</strong></div>` : ''}
+                                        ${!isCorrect ? `<div class="text-slate-400">Bonne réponse attendue : <strong class="text-emerald-400">${escapeHtml(String(displayCorrect))}</strong></div>` : ''}
                                     </div>
                                 </div>
                             `;
