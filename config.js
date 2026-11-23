@@ -220,16 +220,16 @@ window.SUPABASE_CONFIG = {
                         topic: "QCM : Démo 3.3 - Modèles de Langage Autorégressifs (AR LLMs)",
                         student_email: "votre.email@etudiant.univ.fr",
                         answers: {
-                            Q1: "B",
-                            Q2: "C",
-                            Q3: "C",
-                            Q4: "B",
-                            Q5: "C",
-                            Q6: "D",
-                            Q7: "B",
-                            Q8: "C",
-                            Q9: "B",
-                            Q10: "B"
+                            Q1: "A / B / C / D",
+                            Q2: "A / B / C / D",
+                            Q3: "A / B / C / D",
+                            Q4: "A / B / C / D",
+                            Q5: "A / B / C / D",
+                            Q6: "A / B / C / D",
+                            Q7: "A / B / C / D",
+                            Q8: "A / B / C / D",
+                            Q9: "A / B / C / D",
+                            Q10: "A / B / C / D"
                         }
                     }, null, 2)
                 },
