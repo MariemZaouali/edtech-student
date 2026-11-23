@@ -1219,6 +1219,25 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSubmissionsTable(visible);
     }
 
+    // Helper sécurisé pour ouvrir/télécharger un fichier via URL signée (si bucket privé)
+    window.openSecureFile = async function(bucket, filePath, fallbackUrl, event) {
+        if (event && event.preventDefault) event.preventDefault();
+        try {
+            if (supabase && filePath) {
+                const { data, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, 300);
+                if (!error && data?.signedUrl) {
+                    window.open(data.signedUrl, '_blank');
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Fallback URL après tentative createSignedUrl:', e);
+        }
+        if (fallbackUrl) {
+            window.open(fallbackUrl, '_blank');
+        }
+    };
+
     function renderSubmissionsTable(submissions) {
         if (!submissionsTableBody) return;
 
@@ -1336,7 +1355,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${feedbackHtml}
                     </td>
                     <td class="py-3.5 px-2 align-top">
-                        <a href="${sub.file_url}" target="_blank" rel="noopener noreferrer" class="hover:underline flex items-center gap-1">
+                        <a href="${sub.file_url || '#'}" onclick="openSecureFile('${sub.course === 'CNN' ? 'cnn_reports' : (config.STORAGE_BUCKET || 'deliverables')}', '${escapeHtml(sub.file_path || '')}', '${sub.file_url || ''}', event)" target="_blank" rel="noopener noreferrer" class="hover:underline flex items-center gap-1">
                             <i data-lucide="${fileIcon}" class="w-3.5 h-3.5 ${fileColor}"></i>
                             <span class="text-[11px] text-slate-300 truncate max-w-[150px]">${escapeHtml(sub.file_name)}</span>
                             <i data-lucide="external-link" class="w-3 h-3 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity"></i>
@@ -1410,26 +1429,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             realtimeSubscription = supabase
-                .channel('student-feed')
+                .channel(`student-feed-${currentUser.id}`)
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'submissions'
+                    table: 'submissions',
+                    filter: `student_id=eq.${currentUser.id}`
                 }, (payload) => {
-                    if (payload.new?.student_id === currentUser.id || payload.old?.id) {
-                        fetchSubmissions();
-                        if (payload.eventType === 'UPDATE' && payload.new && payload.new.grade !== null) {
-                            showToast(`🎉 Note mise à jour pour ${payload.new.assignment_name} : ${parseFloat(payload.new.grade).toFixed(2)}/20`, "success");
-                            if (window.confetti && parseFloat(payload.new.grade) >= 14) {
-                                confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
-                            }
+                    fetchSubmissions();
+                    if (payload.eventType === 'UPDATE' && payload.new && payload.new.grade !== null) {
+                        showToast(`🎉 Note mise à jour pour ${payload.new.assignment_name} : ${parseFloat(payload.new.grade).toFixed(2)}/20`, "success");
+                        if (window.confetti && parseFloat(payload.new.grade) >= 14) {
+                            confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 } });
                         }
                     }
                 })
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
-                    table: 'student_attempts_override'
+                    table: 'student_attempts_override',
+                    filter: `student_id=eq.${currentUser.id}`
                 }, (payload) => {
                     fetchSubmissions();
                     showToast("🎁 Vos quotas de tentatives ont été mis à jour par l'enseignant !", "info");
@@ -1520,8 +1539,11 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (rank === 3) rankBadge = `<span class="inline-flex items-center justify-center w-7 h-7 rounded-full leaderboard-rank-bronze text-xs font-black shadow-lg">3</span>`;
 
             // Nom affiché : display_name depuis le snapshot (peut être anonymisé par l'enseignant)
-            let displayName = user.display_name || user.student_email.split('@')[0];
-            if (isCurrentUser) displayName += ' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 ml-1">Vous</span>';
+            const rawName = escapeHtml(user.display_name || user.student_email.split('@')[0]);
+            const vousBadge = isCurrentUser
+                ? ' <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 ml-1">Vous</span>'
+                : '';
+            const displayName = rawName + vousBadge;
 
             // Accuracy badge
             const accuracy = user.accuracy_pct != null
@@ -1656,7 +1678,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (latexCurrentRecord && latexCurrentRecord.file_url) {
             latexExistingReport.classList.remove('hidden');
             if (latexExistingName) latexExistingName.textContent = latexCurrentRecord.file_name || 'rapport';
-            if (latexExistingLink) latexExistingLink.href = latexCurrentRecord.file_url;
+            if (latexExistingLink) {
+                latexExistingLink.href = latexCurrentRecord.file_url || '#';
+                latexExistingLink.onclick = (e) => {
+                    openSecureFile('cnn_reports', latexCurrentRecord.file_path || '', latexCurrentRecord.file_url || '', e);
+                };
+            }
             if (latexSubmitText) latexSubmitText.textContent = 'Remplacer le rapport';
         } else {
             latexExistingReport.classList.add('hidden');
@@ -2341,13 +2368,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function launchLivePeerQuiz() {
         if (!supabase || !currentUser) return;
 
-        // Récupérer les questions téléversées par TOUS les étudiants SAUF l'étudiant actuel
+        // Récupérer les questions des pairs via la fonction RPC sécurisée (les réponses correctes sont masquées côté serveur)
         try {
-            const { data, error } = await supabase
-                .from('challenge_questions')
-                .select('*')
-                .neq('student_id', currentUser.id);
-
+            const { data, error } = await supabase.rpc('get_peer_challenge_questions');
             if (error) throw error;
 
             if (!data || data.length === 0) {
@@ -2370,30 +2393,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             opts = Object.keys(q.options).map(k => ({ key: k.toUpperCase(), text: q.options[k] }));
                         }
 
-                        // Normalisation de la réponse attendue (chiffre -> lettre correspondante)
-                        let correctVal = 'A';
-                        if (q.correct !== undefined && q.correct !== null) {
-                            const rawC = String(q.correct).trim().toUpperCase();
-                            if (/^\d+$/.test(rawC)) {
-                                const idxNum = parseInt(rawC, 10);
-                                if (idxNum >= 0 && idxNum < opts.length) {
-                                    correctVal = opts[idxNum].key;
-                                } else if (idxNum >= 1 && idxNum <= opts.length) {
-                                    correctVal = opts[idxNum - 1].key;
-                                } else {
-                                    correctVal = rawC;
-                                }
-                            } else {
-                                correctVal = rawC;
-                            }
-                        }
-
+                        // SÉCURITÉ ABSOLUE : Strictement AUCUN champ 'correct' n'est reçu ni stocké dans le navigateur
                         challengePeerQuestions.push({
                             id: `${row.student_id}_${idx}`,
                             author: authorName,
                             question: q.question,
-                            options: opts,
-                            correct: correctVal
+                            options: opts
                         });
                     });
                 }
@@ -2490,83 +2495,57 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Soumission du QCM (manuelle ou automatique quand l'enseignant arrête)
+    // NOTATION 100% CÔTÉ SERVEUR POSTGRESQL (SECURITY DEFINER)
     async function submitPeerQuiz(isAuto = false) {
         if (!currentUser) return;
         isPeerQuizActive = false;
 
-        let correctCount = 0;
-        const total = challengePeerQuestions.length;
-
-        challengePeerQuestions.forEach(q => {
-            const userAns = peerQuizUserAnswers[q.id];
-            if (isPeerQuizAnswerCorrect(userAns, q.correct, q.options)) {
-                correctCount++;
-            }
-        });
-
-        const score = total > 0 ? Number(((correctCount / total) * 20).toFixed(2)) : 0;
         const currentSessionId = challengeSession?.id || '00000000-0000-0000-0000-000000000001';
 
-        const submissionData = {
-            student_id: currentUser.id,
-            student_email: currentUser.email,
-            session_id: currentSessionId,
-            answers: peerQuizUserAnswers,
-            questions_served: challengePeerQuestions,
-            score: score,
-            total_questions: total,
-            correct_count: correctCount,
-            is_auto_submitted: isAuto,
-            submitted_at: new Date().toISOString()
-        };
-
         try {
-            // Tenter insert (pour garder toutes les tentatives par session) ou fallback upsert
-            const { error: insErr } = await supabase.from('challenge_submissions').insert(submissionData);
-            if (insErr) {
-                await supabase.from('challenge_submissions').upsert(submissionData, {
-                    onConflict: 'student_id,session_id'
-                });
+            // Appel à la fonction RPC sécurisée : le serveur compare avec les clés en base,
+            // calcule le score et effectue les insertions protégées dans challenge_submissions et submissions.
+            const { data: serverResult, error: rpcErr } = await supabase.rpc('submit_peer_challenge', {
+                p_answers: peerQuizUserAnswers,
+                p_session_id: currentSessionId,
+                p_is_auto: isAuto
+            });
+
+            if (rpcErr) throw rpcErr;
+            if (!serverResult || !serverResult.success) {
+                throw new Error("Échec du calcul de la note côté serveur.");
             }
-        } catch (e) {
-            console.warn('Erreur insert challenge_submissions, tentative upsert:', e);
-            try {
-                await supabase.from('challenge_submissions').upsert(submissionData, {
-                    onConflict: 'student_id,session_id'
-                });
-            } catch (err2) {
-                console.error('Erreur sauvegarde soumission challenge:', err2);
-            }
-        }
 
-        // Rafraîchir toutes les soumissions pour recalculer la meilleure note retenue
-        await fetchMyChallengeSubmission();
+            const correctCount = serverResult.correct_count || 0;
+            const total = serverResult.total_questions || challengePeerQuestions.length;
+            const score = serverResult.score || 0;
+            const maxScore = serverResult.max_score || score;
+            const attemptsCount = serverResult.attempts_count || 1;
 
-        const allScores = (challengeAllSubmissions || []).map(s => Number(s.score || 0));
-        const maxScore = allScores.length > 0 ? Math.max(...allScores, score) : score;
-        const attemptsCount = Math.max((challengeAllSubmissions || []).length, 1);
+            // Rafraîchir les données depuis Supabase
+            await fetchMyChallengeSubmission();
+            await fetchSubmissions();
 
-        // Sauvegarder également dans la table submissions générale pour affichage dans l'historique global
-        // avec la NOTE RETENUE MAXIMALE
-        try {
-            await supabase.from('submissions').insert({
+            const finalReviewData = {
                 student_id: currentUser.id,
                 student_email: currentUser.email,
-                assignment_name: "Challenge Your Mate",
-                file_name: "challenge_quiz_answers.json",
-                file_path: `challenge/${currentUser.id}/${Date.now()}.json`,
-                status: "Évalué",
-                grade: maxScore,
-                evaluation_feedback: `Challenge Your Mate • Note retenue : ${maxScore.toFixed(2)}/20 (Meilleure note sur ${attemptsCount} tentative(s)). Dernière tentative : ${score.toFixed(2)}/20 (${correctCount}/${total} bonnes réponses)${isAuto ? ' [Auto-soumis à l\'arrêt par l\'enseignant]' : ''}`,
-                created_at: new Date().toISOString()
-            });
-        } catch (subErr) {
-            console.warn('Erreur enregistrement submissions générale:', subErr);
-        }
+                session_id: currentSessionId,
+                answers: peerQuizUserAnswers,
+                questions_served: challengePeerQuestions,
+                score: score,
+                total_questions: total,
+                correct_count: correctCount,
+                is_auto_submitted: isAuto,
+                submitted_at: new Date().toISOString()
+            };
 
-        // Afficher l'écran de revue détaillé dans la modal avec la note maximale retenue
-        openPeerQuizReview(submissionData, maxScore, attemptsCount);
-        fetchSubmissions();
+            // Afficher l'écran de revue (sans divulgation des réponses exactes)
+            openPeerQuizReview(finalReviewData, maxScore, attemptsCount);
+            showToast(`Challenge validé : Note ${score.toFixed(2)} / 20 !`, "success");
+        } catch (err) {
+            console.error('Erreur lors de la notation serveur du challenge:', err);
+            showToast(`Erreur soumission : ${err.message}`, 'error');
+        }
     }
 
     if (submitPeerQuizBtn) {
@@ -2640,46 +2619,36 @@ document.addEventListener('DOMContentLoaded', () => {
                         ` : ''}
                     </div>
 
-                    <!-- Liste détaillée des réponses -->
+                    <!-- Liste détaillée des réponses (SÉCURISÉE : SANS DIVULGATION DES CORRIGÉS) -->
                     <div class="space-y-4">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            <i data-lucide="list-checks" class="w-4 h-4 text-rose-400"></i>
-                            Détail de vos réponses (Tentative affichée)
-                        </h4>
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i data-lucide="list-checks" class="w-4 h-4 text-rose-400"></i>
+                                Récapitulatif de vos réponses soumises
+                            </h4>
+                            <span class="text-[10px] text-slate-500 font-medium lowercase">corrigé masqué (anti-triche)</span>
+                        </div>
                         ${questions.map((q, idx) => {
                             const userAns = answers[q.id];
-                            const isCorrect = isPeerQuizAnswerCorrect(userAns, q.correct, q.options);
-
-                            // Formatage lisible de la bonne réponse
-                            let displayCorrect = q.correct || 'A';
-                            if (Array.isArray(q.options) && /^\d+$/.test(String(q.correct))) {
-                                const num = parseInt(q.correct, 10);
-                                if (num >= 0 && num < q.options.length) {
-                                    const o = q.options[num];
-                                    const k = o.key || String.fromCharCode(65 + num);
-                                    displayCorrect = `${k} : ${o.text || ''}`;
-                                }
-                            } else if (Array.isArray(q.options)) {
-                                const foundOpt = q.options.find(o => o.key === q.correct);
-                                if (foundOpt) {
-                                    displayCorrect = `${foundOpt.key} : ${foundOpt.text}`;
-                                }
+                            let userOptText = '';
+                            if (Array.isArray(q.options) && userAns) {
+                                const found = q.options.find(o => o.key === userAns);
+                                if (found) userOptText = ` : ${found.text}`;
                             }
 
                             return `
-                                <div class="p-4 rounded-xl border ${isCorrect ? 'bg-emerald-950/20 border-emerald-800/40' : 'bg-rose-950/20 border-rose-800/40'} space-y-2.5">
+                                <div class="p-4 rounded-xl border bg-slate-900/60 border-slate-800 space-y-2">
                                     <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-bold text-white">Question ${idx + 1}</span>
-                                        <span class="text-[11px] px-2 py-0.5 rounded-full font-semibold ${isCorrect ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}">
-                                            ${isCorrect ? '✅ Correct' : userAns ? '❌ Erreur' : '⚪ Non répondue'}
+                                        <span class="text-xs font-bold text-slate-300">Question ${idx + 1}</span>
+                                        <span class="text-[10px] px-2 py-0.5 rounded-md font-semibold ${userAns ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-800 text-slate-400'}">
+                                            ${userAns ? `Option ${userAns}` : '⚪ Non répondue'}
                                         </span>
                                     </div>
                                     <div class="text-xs text-slate-200 font-medium">
                                         ${escapeHtml(q.question)}
                                     </div>
-                                    <div class="text-[11px] space-y-1 pt-1">
-                                        <div class="text-slate-400">Votre réponse : <strong class="${isCorrect ? 'text-emerald-300' : 'text-rose-300'}">${userAns || 'Aucune'}</strong></div>
-                                        ${!isCorrect ? `<div class="text-slate-400">Bonne réponse attendue : <strong class="text-emerald-400">${escapeHtml(String(displayCorrect))}</strong></div>` : ''}
+                                    <div class="text-[11px] space-y-1 pt-1 text-slate-400">
+                                        <div>Votre choix soumis : <strong class="text-white">${userAns || 'Aucun'}</strong>${escapeHtml(userOptText)}</div>
                                     </div>
                                 </div>
                             `;
